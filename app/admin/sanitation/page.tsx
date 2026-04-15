@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import AppShell from "@/components/layout/AppShell";
+import Modal from "@/components/ui/Modal";
 import { Save, CheckCircle, XCircle, Clock, Download, History, Plus, RotateCcw } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -188,6 +189,7 @@ export default function SanitationPage() {
   const [historyEntry, setHistoryEntry] = useState<SavedChecklist | null>(null);
   const [toast, setToast]       = useState<"saved" | "error" | null>(null);
   const [isDirty, setIsDirty]   = useState(false);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load history on mount
@@ -451,11 +453,7 @@ export default function SanitationPage() {
                   style={{fontSize:13, border:"1px solid #D1D5DB", borderRadius:4, padding:"3px 8px", outline:"none", width:130}}
                 />
               </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => {
-                if (window.confirm("Are you sure you want to clear all checks? This cannot be undone.")) {
-                  resetAll();
-                }
-              }}
+              <button className="btn btn-ghost btn-sm" onClick={() => setIsResetModalOpen(true)}
                 title="Clear all checks" aria-label="Clear all checks" style={{flexShrink:0}}>
                 <RotateCcw size={12}/> Reset All
               </button>
@@ -764,6 +762,26 @@ export default function SanitationPage() {
           )}
         </div>
       </div>
+
+      <Modal
+        isOpen={isResetModalOpen}
+        onClose={() => setIsResetModalOpen(false)}
+        title="Reset All Checks"
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", width: "100%" }}>
+            <button className="btn btn-ghost" onClick={() => setIsResetModalOpen(false)}>Cancel</button>
+            <button className="btn btn-primary" style={{ backgroundColor: "var(--color-error)", borderColor: "var(--color-error)" }} onClick={() => {
+              resetAll();
+              setIsResetModalOpen(false);
+            }}>Reset All</button>
+          </div>
+        }
+      >
+        <p style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
+          Are you sure you want to clear all checks for this section? This action cannot be undone.
+        </p>
+      </Modal>
+
     </AppShell>
   );
 }
