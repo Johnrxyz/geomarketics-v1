@@ -5,37 +5,50 @@ import Link from "next/link";
 import Modal from "@/components/ui/Modal";
 import {
   MapPin, Search, Store, TrendingUp, AlertCircle,
-  ChevronRight, Star, Phone, Clock, Send, X, Menu
+  ChevronRight, Star, Phone, Clock, Send, X, Menu, Map as MapIcon
 } from "lucide-react";
+import MarketMap, { MarketStall } from "@/components/map/MarketMap";
 
 const STALLS = [
-  { id: "stall-a01", number: "A-01", vendor: "Maria Santos",   category: "Vegetables", status: "occupied", avgPrice: "₱40–60/kg",  rating: 4.8, isOpen: true },
-  { id: "stall-b01", number: "B-01", vendor: "Pedro Garcia",   category: "Meat",       status: "occupied", avgPrice: "₱180–220/kg", rating: 4.5, isOpen: true },
-  { id: "stall-c01", number: "C-01", vendor: "Carlo Mendoza",  category: "Fish",       status: "occupied", avgPrice: "₱150–250/kg", rating: 4.7, isOpen: true },
-  { id: "stall-d01", number: "D-01", vendor: "Ben Castillo",   category: "Dry Goods",  status: "occupied", avgPrice: "₱50–120/pack",rating: 4.2, isOpen: true },
-  { id: "stall-e01", number: "E-01", vendor: "Nena Cruz",      category: "Cooked Food",status: "occupied", avgPrice: "₱45–75/serve",rating: 4.9, isOpen: true },
-  { id: "stall-e02", number: "E-02", vendor: "Tony Ramos",     category: "Cooked Food",status: "occupied", avgPrice: "₱50–80/serve",rating: 4.3, isOpen: false },
-  { id: "stall-a02", number: "A-02", vendor: "—",              category: "Vegetables", status: "vacant",  avgPrice: "—",          rating: 0,   isOpen: false },
+  { id: "stall-a01", number: "A-01", vendor: "Maria Santos", category: "Vegetables", status: "occupied", avgPrice: "₱40–60/kg", rating: 4.8, isOpen: true },
+  { id: "stall-b01", number: "B-01", vendor: "Pedro Garcia", category: "Meat", status: "occupied", avgPrice: "₱180–220/kg", rating: 4.5, isOpen: true },
+  { id: "stall-c01", number: "C-01", vendor: "Carlo Mendoza", category: "Fish", status: "occupied", avgPrice: "₱150–250/kg", rating: 4.7, isOpen: true },
+  { id: "stall-d01", number: "D-01", vendor: "Ben Castillo", category: "Dry Goods", status: "occupied", avgPrice: "₱50–120/pack", rating: 4.2, isOpen: true },
+  { id: "stall-e01", number: "E-01", vendor: "Nena Cruz", category: "Cooked Food", status: "occupied", avgPrice: "₱45–75/serve", rating: 4.9, isOpen: true },
+  { id: "stall-e02", number: "E-02", vendor: "Tony Ramos", category: "Cooked Food", status: "occupied", avgPrice: "₱50–80/serve", rating: 4.3, isOpen: false },
+  { id: "stall-a02", number: "A-02", vendor: "—", category: "Vegetables", status: "vacant", avgPrice: "—", rating: 0, isOpen: false },
 ];
 
 const CATEGORIES = ["All", "Vegetables", "Meat", "Fish", "Dry Goods", "Cooked Food"];
 
 const PRICES = [
-  { product: "Ampalaya",    price: "₱42/kg",    section: "Section A" },
-  { product: "Bangus",      price: "₱180/kg",   section: "Section C" },
-  { product: "Liempo Pork", price: "₱200/kg",   section: "Section B" },
-  { product: "Adobo Dish",  price: "₱60/serving",section: "Cooked Food" },
-  { product: "Kangkong",    price: "₱25/bundle", section: "Section A" },
-  { product: "Tilapia",     price: "₱120/kg",   section: "Section C" },
+  { product: "Ampalaya", price: "₱42/kg", section: "Section A" },
+  { product: "Bangus", price: "₱180/kg", section: "Section C" },
+  { product: "Liempo Pork", price: "₱200/kg", section: "Section B" },
+  { product: "Adobo Dish", price: "₱60/serving", section: "Cooked Food" },
+  { product: "Kangkong", price: "₱25/bundle", section: "Section A" },
+  { product: "Tilapia", price: "₱120/kg", section: "Section C" },
+];
+
+const MAP_STALLS: MarketStall[] = [
+  { id: "stall-a01", number: "A-01", section: "Section A", vendor: "Maria Santos", category: "Vegetables", status: "owner", x: 1950, y: 1300 },
+  { id: "stall-a02", number: "A-02", section: "Section A", vendor: "—", category: "Vegetables", status: "vacant", x: 2250, y: 1300 },
+  { id: "stall-a03", number: "A-03", section: "Section A", vendor: "Luis Reyes", category: "Vegetables", status: "closed", x: 2550, y: 1300 },
+  { id: "stall-a04", number: "A-04", section: "Section A", vendor: "Juan dela Cruz", category: "Vegetables", status: "rented", x: 2850, y: 1300 },
+  { id: "stall-b01", number: "B-01", section: "Section B", vendor: "Pedro Garcia", category: "Meat", status: "owner", x: 1950, y: 2900 },
+  { id: "stall-b02", number: "B-02", section: "Section B", vendor: "—", category: "Meat", status: "vacant", x: 2250, y: 2900 },
+  { id: "stall-b03", number: "C-01", section: "Section C", vendor: "Carlo Mendoza", category: "Fish", status: "owner", x: 4650, y: 1300 },
+  { id: "stall-b04", number: "D-01", section: "Dry Goods", vendor: "Ben Castillo", category: "Dry Goods", status: "rented", x: 4650, y: 2900 },
+  { id: "stall-e01", number: "E-01", section: "Cooked Food", vendor: "Nena Cruz", category: "Food", status: "ambulant", x: 6000, y: 2900 },
 ];
 
 export default function PublicPage() {
-  const [search, setSearch]         = useState("");
-  const [catFilter, setCatFilter]   = useState("All");
+  const [search, setSearch] = useState("");
+  const [catFilter, setCatFilter] = useState("All");
   const [complaintOpen, setComplaintOpen] = useState(false);
   const [complaintSent, setComplaintSent] = useState(false);
-  const [complaint, setComplaint]   = useState({ stall: "", desc: "", cat: "Sanitation" });
-  const [navOpen, setNavOpen]       = useState(false);
+  const [complaint, setComplaint] = useState({ stall: "", desc: "", cat: "Sanitation" });
+  const [navOpen, setNavOpen] = useState(false);
 
   const filtered = STALLS.filter((s) => {
     const matchSearch = !search ||
@@ -105,13 +118,13 @@ export default function PublicPage() {
             padding: "var(--space-1) var(--space-4)", marginBottom: "var(--space-5)",
             fontSize: "var(--text-xs)", fontWeight: 600, color: "var(--color-primary)"
           }}>
-            <MapPin size={13} /> LC Public Market · San Pedro, Laguna
+            <MapPin size={13} />  New Lucena City Public Market · Lucena, Quezon
           </div>
-          <h1 id="hero-title" style={{ fontSize: "clamp(28px, 5vw, 48px)", fontWeight: 800, marginBottom: "var(--space-4)", lineHeight: 1.2 }}>
+          <h1 id="hero-title" style={{ color: "white", fontSize: "clamp(28px, 5vw, 48px)", fontWeight: 800, marginBottom: "var(--space-4)", lineHeight: 1.2 }}>
             Discover the <span style={{ color: "var(--color-primary)" }}>Fresh Market</span><br />Near You
           </h1>
-          <p style={{ fontSize: "var(--text-md)", opacity: 0.85, marginBottom: "var(--space-8)", lineHeight: 1.7 }}>
-            Browse stalls, check product prices, and find quality vendors at the LC Public Market.
+          <p style={{ color: "white", fontSize: "var(--text-md)", opacity: 0.85, marginBottom: "var(--space-8)", lineHeight: 1.7 }}>
+            Browse stalls, check product prices, and find quality vendors at the New Lucena City Public Market.
           </p>
 
           {/* Search Bar */}
@@ -148,10 +161,10 @@ export default function PublicPage() {
           flexWrap: "wrap"
         }}>
           {[
-            { label: "Total Stalls",  value: "248" },
-            { label: "Open Now",      value: "211" },
-            { label: "Vendors",       value: "198" },
-            { label: "Categories",    value: "6" },
+            { label: "Total Stalls", value: "248" },
+            { label: "Open Now", value: "211" },
+            { label: "Vendors", value: "198" },
+            { label: "Categories", value: "6" },
           ].map(({ label, value }) => (
             <div key={label} style={{ textAlign: "center" }}>
               <div style={{ fontSize: "var(--text-3xl)", fontWeight: 800, color: "var(--color-accent)" }}>{value}</div>
@@ -298,6 +311,51 @@ export default function PublicPage() {
           </div>
         </section>
 
+        {/* Interactive Map Section */}
+        <section id="map" style={{ marginTop: "var(--space-16)" }} aria-labelledby="map-heading">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-6)" }}>
+            <h2 id="map-heading" style={{ fontSize: "var(--text-2xl)", fontWeight: 800, color: "var(--color-accent)", margin: 0 }}>
+              Interactive Market Floor Plan
+            </h2>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>
+              <MapIcon size={16} /> Lucena City Public Market
+            </div>
+          </div>
+
+          <div className="card" style={{ height: "600px", position: "relative", overflow: "hidden" }}>
+            <MarketMap
+              stalls={MAP_STALLS}
+              showAdminLinks={false}
+            />
+          </div>
+
+          <div style={{ marginTop: "var(--space-4)", display: "flex", flexWrap: "wrap", gap: "var(--space-4)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-xs)" }}>
+              <div style={{ width: 12, height: 12, borderRadius: 3, background: "#F97316", border: "1px solid #C2410C" }} />
+              <span>With Renter</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-xs)" }}>
+              <div style={{ width: 12, height: 12, borderRadius: 3, background: "#3B82F6", border: "1px solid #1D4ED8" }} />
+              <span>Vacant Stall</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-xs)" }}>
+              <div style={{ width: 12, height: 12, borderRadius: 3, background: "#16A34A", border: "1px solid #1D4ED8" }} />
+              <span>Storage/Bodega</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-xs)" }}>
+              <div style={{ width: 12, height: 12, borderRadius: 3, background: "#9333EA", border: "1px solid #D1D5DB" }} />
+              <span>Closed</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-xs)" }}>
+              <div style={{ width: 12, height: 12, borderRadius: 3, background: "#FFFFFF", border: "1px solid #D1D5DB" }} />
+              <span>Owner Managed</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-xs)", marginLeft: "auto" }}>
+              <span style={{ color: "var(--text-muted)" }}>* Zoom and drag to explore the market layout</span>
+            </div>
+          </div>
+        </section>
+
         {/* CTA: Report Complaint */}
         <section style={{
           marginTop: "var(--space-16)",
@@ -306,10 +364,10 @@ export default function PublicPage() {
           textAlign: "center", color: "white"
         }} aria-labelledby="report-cta-heading">
           <AlertCircle size={40} style={{ color: "var(--color-primary)", margin: "0 auto var(--space-4)" }} aria-hidden="true" />
-          <h2 id="report-cta-heading" style={{ fontSize: "var(--text-2xl)", fontWeight: 800, marginBottom: "var(--space-3)" }}>
+          <h2 id="report-cta-heading" style={{ color: "white", fontSize: "var(--text-2xl)", fontWeight: 800, marginBottom: "var(--space-3)" }}>
             See a Problem in the Market?
           </h2>
-          <p style={{ opacity: 0.8, marginBottom: "var(--space-6)", maxWidth: 480, margin: "0 auto var(--space-6)" }}>
+          <p style={{ color: "white", opacity: 0.8, marginBottom: "var(--space-6)", maxWidth: 480, margin: "0 auto var(--space-6)" }}>
             Help us keep the market clean and fair. Report any sanitation issues, overpricing, or violations instantly.
           </p>
           <button className="btn btn-primary btn-lg" onClick={() => setComplaintOpen(true)}>
@@ -326,7 +384,7 @@ export default function PublicPage() {
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
           <div style={{ fontWeight: 700, color: "white", marginBottom: "var(--space-2)" }}>GeoMarketics</div>
           <div style={{ fontSize: "var(--text-xs)" }}>
-            © {new Date().getFullYear()} LC Public Market · San Pedro, Laguna · All rights reserved
+            © {new Date().getFullYear()} New Lucena City Public Market · Lucena, Quezon · All rights reserved
           </div>
           <div style={{ marginTop: "var(--space-4)", display: "flex", justifyContent: "center", gap: "var(--space-6)" }}>
             <Link href="/login" style={{ color: "rgba(255,255,255,0.6)", fontSize: "var(--text-xs)" }}>Staff Login</Link>

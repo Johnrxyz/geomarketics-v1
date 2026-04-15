@@ -22,24 +22,24 @@ interface Complaint {
 }
 
 const COMPLAINTS: Complaint[] = [
-  { id: "CMP-001", stall: "B-12", vendor: "Rosa Navarro",   section: "Section B", category: "Sanitation",      description: "Unsanitary meat display — live insects observed around stall area during inspection.",                 status: "open",      date: "Mar 23, 2026", reporter: "Inspector Cruz",   notes: "" },
-  { id: "CMP-002", stall: "A-04", vendor: "Juan dela Cruz", section: "Section A", category: "Overpricing",      description: "Consumer reported fish sold at ₱280/kg, significantly above observed price of ₱185/kg.",           status: "reviewing", date: "Mar 22, 2026", reporter: "Anonymous Consumer", notes: "Price verification in progress." },
-  { id: "CMP-003", stall: "C-08", vendor: "Rosa Navarro",   section: "Section C", category: "Safety Hazard",    description: "Vendor blocking emergency exit with boxes during peak hours.",                                      status: "resolved",  date: "Mar 21, 2026", reporter: "Market Guard",      notes: "Vendor warned and complied." },
-  { id: "CMP-004", stall: "E-01", vendor: "Nena Cruz",      section: "Cooked Food", category: "Food Safety",   description: "Cooked food exposed without proper covering, attracting flies.",                                   status: "open",      date: "Mar 20, 2026", reporter: "Consumer App",     notes: "" },
-  { id: "CMP-005", stall: "A-01", vendor: "Maria Santos",   section: "Section A", category: "Display Violation", description: "Display items exceeding designated stall boundaries.",                                            status: "reviewing", date: "Mar 18, 2026", reporter: "Section A Officer", notes: "Measurement pending." },
-  { id: "CMP-006", stall: "D-01", vendor: "Ben Castillo",   section: "Dry Goods", category: "Permit Violation", description: "Business permit not visible / posted in required location.",                                    status: "resolved",  date: "Mar 15, 2026", reporter: "Inspector Reyes",   notes: "Permit posted. Case closed." },
+  { id: "CMP-001", stall: "B-12", vendor: "Rosa Navarro", section: "Section B", category: "Sanitation", description: "Unsanitary meat display — live insects observed around stall area during inspection.", status: "open", date: "Mar 23, 2026", reporter: "Inspector Cruz", notes: "" },
+  { id: "CMP-002", stall: "A-04", vendor: "Juan dela Cruz", section: "Section A", category: "Overpricing", description: "Consumer reported fish sold at ₱280/kg, significantly above observed price of ₱185/kg.", status: "reviewing", date: "Mar 22, 2026", reporter: "Anonymous Consumer", notes: "Price verification in progress." },
+  { id: "CMP-003", stall: "C-08", vendor: "Rosa Navarro", section: "Section C", category: "Safety Hazard", description: "Vendor blocking emergency exit with boxes during peak hours.", status: "resolved", date: "Mar 21, 2026", reporter: "Market Guard", notes: "Vendor warned and complied." },
+  { id: "CMP-004", stall: "E-01", vendor: "Nena Cruz", section: "Cooked Food", category: "Food Safety", description: "Cooked food exposed without proper covering, attracting flies.", status: "open", date: "Mar 20, 2026", reporter: "Consumer App", notes: "" },
+  { id: "CMP-005", stall: "A-01", vendor: "Maria Santos", section: "Section A", category: "Display Violation", description: "Display items exceeding designated stall boundaries.", status: "reviewing", date: "Mar 18, 2026", reporter: "Section A Officer", notes: "Measurement pending." },
+  { id: "CMP-006", stall: "D-01", vendor: "Ben Castillo", section: "Dry Goods", category: "Permit Violation", description: "Business permit not visible / posted in required location.", status: "resolved", date: "Mar 15, 2026", reporter: "Inspector Reyes", notes: "Permit posted. Case closed." },
 ];
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
-  open:      <AlertCircle size={14} />,
+  open: <AlertCircle size={14} />,
   reviewing: <Clock size={14} />,
-  resolved:  <CheckCircle size={14} />,
+  resolved: <CheckCircle size={14} />,
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  open:      "badge-open",
+  open: "badge-open",
   reviewing: "badge-reviewing",
-  resolved:  "badge-resolved",
+  resolved: "badge-resolved",
 };
 
 export default function ComplaintsPage() {
@@ -50,7 +50,7 @@ export default function ComplaintsPage() {
   const [newOpen, setNewOpen] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [newComplaint, setNewComplaint] = useState({
-    stall:"", description:"", category:"Sanitation"
+    stall: "", description: "", category: "Sanitation"
   });
 
   const filtered = complaints.filter((c) => {
@@ -88,9 +88,9 @@ export default function ComplaintsPage() {
     setNewComplaint({ stall: "", description: "", category: "Sanitation" });
   };
 
-  const open      = complaints.filter((c) => c.status === "open").length;
+  const open = complaints.filter((c) => c.status === "open").length;
   const reviewing = complaints.filter((c) => c.status === "reviewing").length;
-  const resolved  = complaints.filter((c) => c.status === "resolved").length;
+  const resolved = complaints.filter((c) => c.status === "resolved").length;
 
   return (
     <AppShell pageTitle="Complaint & Blotter" role="admin" userName="Admin User" userRole="Administrator">
@@ -107,31 +107,31 @@ export default function ComplaintsPage() {
       </div>
 
       {/* Summary row */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"var(--space-4)",marginBottom:"var(--space-6)"}}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "var(--space-4)", marginBottom: "var(--space-6)" }}>
         {[
-          { label:"Open",       value:open,      color:"var(--color-error)",   bg:"#FEE2E2", icon:<AlertCircle size={20}/> },
-          { label:"Reviewing",  value:reviewing, color:"var(--color-warning)", bg:"#FEF3C7", icon:<Clock size={20}/> },
-          { label:"Resolved",   value:resolved,  color:"var(--color-success)", bg:"#DCFCE7", icon:<CheckCircle size={20}/> },
+          { label: "Open", value: open, color: "var(--color-error)", bg: "#FEE2E2", icon: <AlertCircle size={20} /> },
+          { label: "Reviewing", value: reviewing, color: "var(--color-warning)", bg: "#FEF3C7", icon: <Clock size={20} /> },
+          { label: "Resolved", value: resolved, color: "var(--color-success)", bg: "#DCFCE7", icon: <CheckCircle size={20} /> },
         ].map(({ label, value, color, bg, icon }) => (
           <div key={label} style={{
-            background:"white",borderRadius:"var(--radius-lg)",padding:"var(--space-5)",
-            boxShadow:"var(--shadow-md)",display:"flex",alignItems:"center",gap:"var(--space-4)"
+            background: "white", borderRadius: "var(--radius-lg)", padding: "var(--space-5)",
+            boxShadow: "var(--shadow-md)", display: "flex", alignItems: "center", gap: "var(--space-4)"
           }}>
-            <div style={{width:44,height:44,borderRadius:"var(--radius-md)",background:bg,display:"flex",alignItems:"center",justifyContent:"center",color,flexShrink:0}}>{icon}</div>
+            <div style={{ width: 44, height: 44, borderRadius: "var(--radius-md)", background: bg, display: "flex", alignItems: "center", justifyContent: "center", color, flexShrink: 0 }}>{icon}</div>
             <div>
-              <div style={{fontSize:"var(--text-2xl)",fontWeight:800}}>{value}</div>
-              <div style={{fontSize:"var(--text-sm)",color:"var(--text-secondary)"}}>{label}</div>
+              <div style={{ fontSize: "var(--text-2xl)", fontWeight: 800 }}>{value}</div>
+              <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>{label}</div>
             </div>
           </div>
         ))}
       </div>
 
-      <div style={{display:"flex",gap:"var(--space-5)"}}>
+      <div style={{ display: "flex", gap: "var(--space-5)" }}>
         {/* Complaint List */}
-        <div style={{flex:"0 0 380px",display:"flex",flexDirection:"column",gap:"var(--space-4)"}}>
+        <div style={{ flex: "0 0 380px", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
           {/* Filters */}
-          <div style={{display:"flex",flexDirection:"column",gap:"var(--space-3)"}}>
-            <div className="search-input-wrapper" style={{maxWidth:"100%"}}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+            <div className="search-input-wrapper" style={{ maxWidth: "100%" }}>
               <Search size={15} className="search-icon" />
               <input type="search" className="search-input" placeholder="Search complaints..."
                 value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search complaints" />
@@ -146,7 +146,7 @@ export default function ComplaintsPage() {
           </div>
 
           {/* List */}
-          <div className="card" style={{overflowY:"auto",maxHeight:"calc(100vh - 380px)"}}>
+          <div className="card" style={{ overflowY: "auto", maxHeight: "calc(100vh - 380px)" }}>
             {filtered.length === 0 ? (
               <div className="empty-state"><div className="empty-state-title">No complaints found</div></div>
             ) : filtered.map((c) => (
@@ -154,30 +154,30 @@ export default function ComplaintsPage() {
                 key={c.id}
                 onClick={() => setSelected(c)}
                 style={{
-                  width:"100%",padding:"var(--space-4)",textAlign:"left",
+                  width: "100%", padding: "var(--space-4)", textAlign: "left",
                   background: selected?.id === c.id ? "var(--bg-secondary)" : "white",
-                  borderBottom:"1px solid #F3F4F6",cursor:"pointer",
-                  display:"flex",flexDirection:"column",gap:"var(--space-2)",
-                  transition:"background var(--transition-fast)",
+                  borderBottom: "1px solid #F3F4F6", cursor: "pointer",
+                  display: "flex", flexDirection: "column", gap: "var(--space-2)",
+                  transition: "background var(--transition-fast)",
                 }}
                 aria-label={`View complaint ${c.id}`}
                 aria-pressed={selected?.id === c.id}
               >
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                  <span style={{fontFamily:"var(--font-mono)",fontSize:"var(--text-xs)",fontWeight:700,color:"var(--color-accent)"}}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-accent)" }}>
                     {c.id}
                   </span>
-                  <span className={`badge ${STATUS_COLORS[c.status]} badge-dot`} style={{textTransform:"capitalize"}}>
+                  <span className={`badge ${STATUS_COLORS[c.status]} badge-dot`} style={{ textTransform: "capitalize" }}>
                     {c.status}
                   </span>
                 </div>
-                <div style={{fontSize:"var(--text-sm)",fontWeight:600,color:"var(--text-primary)"}}>{c.vendor}</div>
-                <div style={{fontSize:"var(--text-xs)",color:"var(--text-secondary)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                <div style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--text-primary)" }}>{c.vendor}</div>
+                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {c.description}
                 </div>
-                <div style={{display:"flex",alignItems:"center",gap:"var(--space-3)",fontSize:"var(--text-xs)",color:"var(--text-muted)"}}>
-                  <span><Store size={10} style={{display:"inline",marginRight:3}}/>Stall {c.stall}</span>
-                  <span><Calendar size={10} style={{display:"inline",marginRight:3}}/>{c.date}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                  <span><Store size={10} style={{ display: "inline", marginRight: 3 }} />Stall {c.stall}</span>
+                  <span><Calendar size={10} style={{ display: "inline", marginRight: 3 }} />{c.date}</span>
                 </div>
               </button>
             ))}
@@ -185,9 +185,9 @@ export default function ComplaintsPage() {
         </div>
 
         {/* Detail Panel */}
-        <div style={{flex:1,minWidth:0}}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           {!selected ? (
-            <div className="card" style={{height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div className="card" style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <div className="empty-state">
                 <div className="empty-state-icon"><MessageSquare size={28} /></div>
                 <div className="empty-state-title">Select a complaint</div>
@@ -195,51 +195,51 @@ export default function ComplaintsPage() {
               </div>
             </div>
           ) : (
-            <div style={{display:"flex",flexDirection:"column",gap:"var(--space-5)"}}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
               {/* Header */}
               <div className="card">
                 <div className="card-header">
                   <div>
-                    <div style={{display:"flex",alignItems:"center",gap:"var(--space-3)"}}>
-                      <span style={{fontFamily:"var(--font-mono)",fontWeight:700,color:"var(--color-accent)"}}>{selected.id}</span>
-                      <span className={`badge ${STATUS_COLORS[selected.status]} badge-dot`} style={{textTransform:"capitalize"}}>{selected.status}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--color-accent)" }}>{selected.id}</span>
+                      <span className={`badge ${STATUS_COLORS[selected.status]} badge-dot`} style={{ textTransform: "capitalize" }}>{selected.status}</span>
                     </div>
-                    <div style={{fontSize:"var(--text-lg)",fontWeight:700,marginTop:"var(--space-1)"}}>{selected.category}</div>
+                    <div style={{ fontSize: "var(--text-lg)", fontWeight: 700, marginTop: "var(--space-1)" }}>{selected.category}</div>
                   </div>
                 </div>
                 <div className="card-body">
                   {/* Info grid */}
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"var(--space-4)",marginBottom:"var(--space-5)"}}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "var(--space-4)", marginBottom: "var(--space-5)" }}>
                     {[
-                      { label:"Stall",    value:selected.stall },
-                      { label:"Vendor",   value:selected.vendor },
-                      { label:"Section",  value:selected.section },
-                      { label:"Date",     value:selected.date },
-                      { label:"Reporter", value:selected.reporter },
-                      { label:"Category", value:selected.category },
+                      { label: "Stall", value: selected.stall },
+                      { label: "Vendor", value: selected.vendor },
+                      { label: "Section", value: selected.section },
+                      { label: "Date", value: selected.date },
+                      { label: "Reporter", value: selected.reporter },
+                      { label: "Category", value: selected.category },
                     ].map(({ label, value }) => (
                       <div key={label}>
-                        <div style={{fontSize:"var(--text-xs)",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",color:"var(--text-muted)",marginBottom:2}}>{label}</div>
-                        <div style={{fontSize:"var(--text-sm)",fontWeight:600}}>{value}</div>
+                        <div style={{ fontSize: "var(--text-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", marginBottom: 2 }}>{label}</div>
+                        <div style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>{value}</div>
                       </div>
                     ))}
                   </div>
 
                   {/* Description */}
                   <div style={{
-                    padding:"var(--space-4)",background:"#F9FAFB",
-                    borderRadius:"var(--radius-md)",marginBottom:"var(--space-4)",
-                    borderLeft:"3px solid var(--color-primary)"
+                    padding: "var(--space-4)", background: "#F9FAFB",
+                    borderRadius: "var(--radius-md)", marginBottom: "var(--space-4)",
+                    borderLeft: "3px solid var(--color-primary)"
                   }}>
-                    <div style={{fontSize:"var(--text-xs)",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",color:"var(--text-muted)",marginBottom:"var(--space-2)"}}>Description</div>
-                    <p style={{fontSize:"var(--text-sm)"}}>{selected.description}</p>
+                    <div style={{ fontSize: "var(--text-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", marginBottom: "var(--space-2)" }}>Description</div>
+                    <p style={{ fontSize: "var(--text-sm)" }}>{selected.description}</p>
                   </div>
 
                   {/* Notes */}
                   {selected.notes && (
-                    <div style={{padding:"var(--space-3) var(--space-4)",background:"#DBEAFE",borderRadius:"var(--radius-sm)"}}>
-                      <div style={{fontSize:"var(--text-xs)",color:"var(--text-muted)",marginBottom:2}}>Admin Notes</div>
-                      <p style={{fontSize:"var(--text-sm)",color:"var(--color-info)"}}>{selected.notes}</p>
+                    <div style={{ padding: "var(--space-3) var(--space-4)", background: "#DBEAFE", borderRadius: "var(--radius-sm)" }}>
+                      <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 2 }}>Admin Notes</div>
+                      <p style={{ fontSize: "var(--text-sm)", color: "var(--color-info)" }}>{selected.notes}</p>
                     </div>
                   )}
                 </div>
@@ -248,14 +248,14 @@ export default function ComplaintsPage() {
               {/* Update status */}
               <div className="card">
                 <div className="card-header"><div className="card-title">Update Status</div></div>
-                <div className="card-body" style={{display:"flex",flexDirection:"column",gap:"var(--space-4)"}}>
+                <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
                   <div className="form-group">
                     <label className="form-label" htmlFor="admin-notes">Admin Notes</label>
                     <textarea id="admin-notes" className="form-textarea" rows={2}
                       placeholder="Add notes about this complaint..."
                       value={newNote} onChange={(e) => setNewNote(e.target.value)} />
                   </div>
-                  <div style={{display:"flex",gap:"var(--space-3)",flexWrap:"wrap"}}>
+                  <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap" }}>
                     <button className="btn btn-ghost" onClick={() => updateStatus(selected.id, "open")}
                       disabled={selected.status === "open"}>
                       <AlertCircle size={14} /> Mark Open
@@ -287,7 +287,7 @@ export default function ComplaintsPage() {
           </>
         }
       >
-        <div style={{display:"flex",flexDirection:"column",gap:"var(--space-4)"}}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
           <div className="form-group">
             <label className="form-label" htmlFor="nc-stall">Stall Number (if known)</label>
             <input id="nc-stall" className="form-input" placeholder="e.g. B-12"
