@@ -451,7 +451,11 @@ export default function SanitationPage() {
                   style={{fontSize:13, border:"1px solid #D1D5DB", borderRadius:4, padding:"3px 8px", outline:"none", width:130}}
                 />
               </div>
-              <button className="btn btn-ghost btn-sm" onClick={resetAll}
+              <button className="btn btn-ghost btn-sm" onClick={() => {
+                if (window.confirm("Are you sure you want to clear all checks? This cannot be undone.")) {
+                  resetAll();
+                }
+              }}
                 title="Clear all checks" aria-label="Clear all checks" style={{flexShrink:0}}>
                 <RotateCcw size={12}/> Reset All
               </button>
