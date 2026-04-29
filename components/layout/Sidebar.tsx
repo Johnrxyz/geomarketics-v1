@@ -4,9 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Map, Store, FileText, AlertCircle,
-  TrendingUp, BarChart2, Globe, Users, Settings,
-  ChevronLeft, ChevronRight, LogOut, ShieldCheck, ClipboardCheck
+  LayoutDashboard, Map, Store, AlertCircle,
+  TrendingUp, BarChart2, Globe, Users,
+  ChevronLeft, ChevronRight, LogOut, ClipboardCheck
 } from "lucide-react";
 
 type Role = "admin" | "vendor";
@@ -30,7 +30,6 @@ const adminNav: NavItem[] = [
 
 const vendorNav: NavItem[] = [
   { label: "My Profile", href: "/vendor/profile", icon: <Store size={18} /> },
-  { label: "My Documents", href: "/vendor/documents", icon: <FileText size={18} /> },
   { label: "Market Map", href: "/map", icon: <Map size={18} /> },
   { label: "Complaints", href: "/admin/complaints", icon: <AlertCircle size={18} /> },
 ];
