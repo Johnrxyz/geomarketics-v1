@@ -248,6 +248,7 @@ export default function SanitationPage() {
     saveToStorage(updated);
     setHistory(updated);
     setIsDirty(false);
+    resetAll();
     showToast("saved");
   };
 

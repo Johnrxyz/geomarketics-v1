@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { X, User } from "lucide-react";
+import { X, User, ZoomIn, ZoomOut, Expand } from "lucide-react";
 
 // ─── Types & Constants ────────────────────────────────────────────────────────
 
@@ -138,6 +138,41 @@ export default function MarketMap({ stalls, selectedStallId, onStallSelect, show
     setTimeout(() => { isAnimating.current = false; }, 600);
   };
 
+  const handleZoom = (direction: 'in' | 'out') => {
+    if (isAnimating.current) return;
+    isAnimating.current = true;
+    setTransform(prev => {
+      let newScale = prev.scale * (direction === 'in' ? 1.5 : 0.666);
+      if (newScale < 0.05) newScale = 0.05;
+      if (newScale > 2) newScale = 2;
+
+      if (!containerRef.current) return prev;
+      const rect = containerRef.current.getBoundingClientRect();
+      const cx = rect.width / 2;
+      const cy = rect.height / 2;
+
+      const targetX = (cx - prev.x) / prev.scale;
+      const targetY = (cy - prev.y) / prev.scale;
+
+      const newX = cx - targetX * newScale;
+      const newY = cy - targetY * newScale;
+
+      return { x: newX, y: newY, scale: newScale };
+    });
+    setTimeout(() => { isAnimating.current = false; }, 300); // Shorter animation for zoom buttons
+  };
+
+  const resetZoom = () => {
+    if (!containerRef.current || isAnimating.current) return;
+    const { width, height } = containerRef.current.getBoundingClientRect();
+    const initialScale = Math.max(width / SVG_WIDTH, 0.1);
+    const initX = (width - SVG_WIDTH * initialScale) / 2;
+    const initY = (height - SVG_HEIGHT * initialScale) / 2;
+    isAnimating.current = true;
+    setTransform({ x: initX, y: initY, scale: initialScale });
+    setTimeout(() => { isAnimating.current = false; }, 500);
+  };
+
   return (
     <div
       ref={containerRef}
@@ -213,6 +248,45 @@ export default function MarketMap({ stalls, selectedStallId, onStallSelect, show
           )}
         </div>
       )}
+
+      {/* Zoom Controls */}
+      <div style={{
+        position: "absolute",
+        bottom: 16,
+        right: 16,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        zIndex: 100
+      }} onPointerDown={(e) => e.stopPropagation()}>
+        <button
+          onClick={() => handleZoom('in')}
+          className="btn btn-primary"
+          style={{ width: 40, height: 40, padding: 0, justifyContent: "center", borderRadius: "8px" }}
+          aria-label="Zoom In"
+          title="Zoom In"
+        >
+          <ZoomIn size={20} />
+        </button>
+        <button
+          onClick={resetZoom}
+          className="btn btn-primary"
+          style={{ width: 40, height: 40, padding: 0, justifyContent: "center", borderRadius: "8px" }}
+          aria-label="Reset Zoom"
+          title="Reset Zoom"
+        >
+          <Expand size={20} />
+        </button>
+        <button
+          onClick={() => handleZoom('out')}
+          className="btn btn-primary"
+          style={{ width: 40, height: 40, padding: 0, justifyContent: "center", borderRadius: "8px" }}
+          aria-label="Zoom Out"
+          title="Zoom Out"
+        >
+          <ZoomOut size={20} />
+        </button>
+      </div>
 
       <style>{`
         @keyframes popIn {

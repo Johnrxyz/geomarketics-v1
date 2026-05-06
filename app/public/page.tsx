@@ -47,7 +47,7 @@ export default function PublicPage() {
   const [catFilter, setCatFilter] = useState("All");
   const [complaintOpen, setComplaintOpen] = useState(false);
   const [complaintSent, setComplaintSent] = useState(false);
-  const [complaint, setComplaint] = useState({ stall: "", desc: "", cat: "Sanitation" });
+  const [complaint, setComplaint] = useState<{ stall: string; desc: string; cat: string; image: File | null }>({ stall: "", desc: "", cat: "Sanitation", image: null });
   const [navOpen, setNavOpen] = useState(false);
 
   const filtered = STALLS.filter((s) => {
@@ -397,7 +397,7 @@ export default function PublicPage() {
       {/* Complaint Modal */}
       <Modal
         isOpen={complaintOpen}
-        onClose={() => { setComplaintOpen(false); setComplaintSent(false); setComplaint({ stall: "", desc: "", cat: "Sanitation" }); }}
+        onClose={() => { setComplaintOpen(false); setComplaintSent(false); setComplaint({ stall: "", desc: "", cat: "Sanitation", image: null }); }}
         title="Report a Market Issue"
         footer={complaintSent ? undefined : (
           <>
@@ -440,6 +440,23 @@ export default function PublicPage() {
                 placeholder="What did you observe? Be as specific as possible..."
                 aria-required="true"
                 value={complaint.desc} onChange={(e) => setComplaint((p) => ({ ...p, desc: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="pub-image">Upload Image (Optional)</label>
+              <input 
+                id="pub-image" 
+                type="file" 
+                accept="image/*" 
+                className="form-input" 
+                style={{ padding: "var(--space-2)" }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  setComplaint((p) => ({ ...p, image: file }));
+                }}
+              />
+              <p style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: "var(--space-1)" }}>
+                Attach a photo to help us better understand the issue.
+              </p>
             </div>
           </div>
         )}
