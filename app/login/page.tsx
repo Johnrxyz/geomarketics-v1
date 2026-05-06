@@ -32,7 +32,7 @@ export default function LoginPage() {
     setLoading(false);
 
     if (role === "admin") {
-      router.push("/dashboard");
+      router.push("/map");
     } else {
       router.push("/vendor/profile");
     }

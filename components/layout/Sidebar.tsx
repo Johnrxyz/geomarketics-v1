@@ -65,29 +65,51 @@ export default function Sidebar({ role = "admin", collapsed, onToggle, mobileOpe
               className={`sidebar-link${isActive ? " active" : ""}`}
               aria-current={isActive ? "page" : undefined}
               title={collapsed ? item.label : undefined}
+              style={{
+                margin: "2px 8px",
+                borderRadius: "12px",
+                padding: "10px 12px",
+                background: isActive ? "rgba(255, 203, 5, 0.9)" : "transparent",
+                color: isActive ? "#11296B" : "rgba(255, 255, 255, 0.7)",
+                transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+              }}
             >
-              <span className="sidebar-link-icon" aria-hidden="true">{item.icon}</span>
-              <span className="sidebar-link-text">{item.label}</span>
+              <span className="sidebar-link-icon" aria-hidden="true" style={{ color: "inherit" }}>{item.icon}</span>
+              <span className="sidebar-link-text" style={{ fontWeight: isActive ? "700" : "500" }}>{item.label}</span>
             </Link>
           );
         })}
 
-        <div className="sidebar-section-label" style={{ marginTop: "var(--space-4)" }}>Public</div>
+        <div className="sidebar-section-label" style={{ marginTop: "var(--space-4)", paddingLeft: "20px" }}>Public</div>
         <Link
           href="/public"
           className={`sidebar-link${pathname === "/public" ? " active" : ""}`}
           title={collapsed ? "Consumer View" : undefined}
+          style={{
+            margin: "2px 8px",
+            borderRadius: "12px",
+            padding: "10px 12px",
+            background: pathname === "/public" ? "rgba(255, 203, 5, 0.9)" : "transparent",
+            color: pathname === "/public" ? "#11296B" : "rgba(255, 255, 255, 0.7)",
+            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+          }}
         >
-          <span className="sidebar-link-icon" aria-hidden="true"><Globe size={18} /></span>
+          <span className="sidebar-link-icon" aria-hidden="true" style={{ color: "inherit" }}><Globe size={18} /></span>
           <span className="sidebar-link-text">Consumer View</span>
         </Link>
       </nav>
 
       {/* Bottom */}
-      <div className="sidebar-bottombar">
+      <div className="sidebar-bottombar" style={{ borderTop: "1px solid rgba(255,255,255,0.1)", padding: "16px 8px" }}>
         <button
           className="sidebar-link"
-          style={{ width: "100%", marginBottom: "var(--space-2)" }}
+          style={{ 
+            width: "100%", 
+            marginBottom: "var(--space-2)",
+            borderRadius: "12px",
+            padding: "10px 12px",
+            color: "rgba(255, 255, 255, 0.7)",
+          }}
           onClick={onToggle}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
@@ -96,7 +118,11 @@ export default function Sidebar({ role = "admin", collapsed, onToggle, mobileOpe
           </span>
           <span className="sidebar-link-text">Collapse</span>
         </button>
-        <Link href="/login" className="sidebar-link">
+        <Link href="/login" className="sidebar-link" style={{ 
+          borderRadius: "12px", 
+          padding: "10px 12px",
+          color: "rgba(255, 255, 255, 0.7)",
+        }}>
           <span className="sidebar-link-icon" aria-hidden="true"><LogOut size={18} /></span>
           <span className="sidebar-link-text">Sign Out</span>
         </Link>

@@ -12,9 +12,10 @@ interface AppShellProps {
   role?: Role;
   userName?: string;
   userRole?: string;
+  floatingSidebar?: boolean;
 }
 
-export default function AppShell({ children, pageTitle, role = "admin", userName, userRole }: AppShellProps) {
+export default function AppShell({ children, pageTitle, role = "admin", userName, userRole, floatingSidebar = false }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -41,7 +42,7 @@ export default function AppShell({ children, pageTitle, role = "admin", userName
         />
       )}
 
-      <div className={`app-content${collapsed ? " sidebar-collapsed" : ""}`}>
+      <div className={`app-content${collapsed ? " sidebar-collapsed" : ""}${floatingSidebar ? " floating-sidebar" : ""}`}>
         <Header
           pageTitle={pageTitle}
           sidebarCollapsed={collapsed}

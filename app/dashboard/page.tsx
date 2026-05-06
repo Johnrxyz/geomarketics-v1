@@ -4,7 +4,7 @@ import AppShell from "@/components/layout/AppShell";
 import StatCard from "@/components/ui/StatCard";
 import {
   Store, Users, AlertCircle, TrendingUp, FileText, CheckCircle,
-  ArrowRight, Plus, RefreshCw
+  ArrowRight, Download, RefreshCw
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -55,7 +55,7 @@ export default function DashboardPage() {
             <RefreshCw size={15} /> Refresh
           </button>
           <button className="btn btn-primary" style={{gap:"6px"}}>
-            <Plus size={15} /> Add Stall
+            <Download size={15} /> Export Data
           </button>
         </div>
       </div>
