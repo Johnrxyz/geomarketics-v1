@@ -9,6 +9,11 @@ import {
 } from "lucide-react";
 import MarketMap, { MarketStall } from "@/components/map/MarketMap";
 
+function censorName(name: string) {
+  if (!name || name === "—" || name.toLowerCase() === "vacant") return name;
+  return name.split(" ").map(part => part ? part[0] + "*".repeat(Math.max(0, part.length - 1)) : "").join(" ");
+}
+
 const STALLS = [
   { id: "stall-a01", number: "A-01", vendor: "Maria Santos", category: "Vegetables", status: "occupied", avgPrice: "₱40–60/kg", rating: 4.8, isOpen: true },
   { id: "stall-b01", number: "B-01", vendor: "Pedro Garcia", category: "Meat", status: "occupied", avgPrice: "₱180–220/kg", rating: 4.5, isOpen: true },
@@ -21,13 +26,36 @@ const STALLS = [
 
 const CATEGORIES = ["All", "Vegetables", "Meat", "Fish", "Dry Goods", "Cooked Food"];
 
-const PRICES = [
-  { product: "Ampalaya", price: "₱42/kg", section: "Section A" },
-  { product: "Bangus", price: "₱180/kg", section: "Section C" },
-  { product: "Liempo Pork", price: "₱200/kg", section: "Section B" },
-  { product: "Adobo Dish", price: "₱60/serving", section: "Cooked Food" },
-  { product: "Kangkong", price: "₱25/bundle", section: "Section A" },
-  { product: "Tilapia", price: "₱120/kg", section: "Section C" },
+const PRICES_CATEGORIZED = [
+  { 
+    category: "Vegetables", 
+    items: [
+      { product: "Ampalaya", price: "₱40 - ₱50/kg" },
+      { product: "Kangkong", price: "₱20 - ₱30/bundle" },
+      { product: "Tomatoes", price: "₱60 - ₱80/kg" },
+    ]
+  },
+  { 
+    category: "Meat & Poultry", 
+    items: [
+      { product: "Liempo Pork", price: "₱190 - ₱220/kg" },
+      { product: "Whole Chicken", price: "₱180 - ₱200/kg" },
+    ]
+  },
+  { 
+    category: "Seafood", 
+    items: [
+      { product: "Bangus", price: "₱170 - ₱200/kg" },
+      { product: "Tilapia", price: "₱110 - ₱130/kg" },
+    ]
+  },
+  { 
+    category: "Cooked Food", 
+    items: [
+      { product: "Adobo Dish", price: "₱50 - ₱70/serving" },
+      { product: "Sinigang", price: "₱60 - ₱80/serving" },
+    ]
+  }
 ];
 
 const MAP_STALLS: MarketStall[] = [
@@ -47,7 +75,7 @@ export default function PublicPage() {
   const [catFilter, setCatFilter] = useState("All");
   const [complaintOpen, setComplaintOpen] = useState(false);
   const [complaintSent, setComplaintSent] = useState(false);
-  const [complaint, setComplaint] = useState<{ stall: string; desc: string; cat: string; image: File | null }>({ stall: "", desc: "", cat: "Sanitation", image: null });
+  const [complaint, setComplaint] = useState<{ stall: string; email: string; desc: string; cat: string; image: File | null }>({ stall: "", email: "", desc: "", cat: "Sanitation", image: null });
   const [navOpen, setNavOpen] = useState(false);
 
   const filtered = STALLS.filter((s) => {
@@ -248,7 +276,7 @@ export default function PublicPage() {
                     {stall.vendor !== "—" && (
                       <div style={{ marginBottom: "var(--space-3)" }}>
                         <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 2 }}>Vendor</div>
-                        <div style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{stall.vendor}</div>
+                        <div style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{censorName(stall.vendor)}</div>
                         {stall.rating > 0 && (
                           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-1)", marginTop: "var(--space-1)" }}>
                             {renderStars(stall.rating)}
@@ -296,16 +324,24 @@ export default function PublicPage() {
           <h2 id="prices-heading" style={{ fontSize: "var(--text-2xl)", fontWeight: 800, color: "var(--color-accent)", marginBottom: "var(--space-6)" }}>
             Today's Price Check
           </h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: "var(--space-4)" }}>
-            {PRICES.map((p) => (
-              <div key={p.product} style={{
-                background: "white", borderRadius: "var(--radius-lg)",
-                padding: "var(--space-5)", boxShadow: "var(--shadow-md)",
-                borderTop: "3px solid var(--color-primary)"
-              }}>
-                <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)", marginBottom: "var(--space-1)" }}>{p.section}</div>
-                <div style={{ fontSize: "var(--text-md)", fontWeight: 700, marginBottom: "var(--space-2)" }}>{p.product}</div>
-                <div style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: "var(--color-accent)" }}>{p.price}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-8)" }}>
+            {PRICES_CATEGORIZED.map((categoryGroup) => (
+              <div key={categoryGroup.category}>
+                <h3 style={{ fontSize: "var(--text-lg)", fontWeight: 700, color: "var(--color-accent)", marginBottom: "var(--space-4)", borderBottom: "2px solid var(--border-color)", paddingBottom: "var(--space-2)" }}>
+                  {categoryGroup.category}
+                </h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: "var(--space-4)" }}>
+                  {categoryGroup.items.map((p) => (
+                    <div key={p.product} style={{
+                      background: "white", borderRadius: "var(--radius-lg)",
+                      padding: "var(--space-5)", boxShadow: "var(--shadow-md)",
+                      borderTop: "3px solid var(--color-primary)"
+                    }}>
+                      <div style={{ fontSize: "var(--text-md)", fontWeight: 700, marginBottom: "var(--space-2)" }}>{p.product}</div>
+                      <div style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "var(--color-accent)" }}>{p.price}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -324,7 +360,7 @@ export default function PublicPage() {
 
           <div className="card" style={{ height: "600px", position: "relative", overflow: "hidden" }}>
             <MarketMap
-              stalls={MAP_STALLS}
+              stalls={MAP_STALLS.map(s => ({ ...s, vendor: censorName(s.vendor) }))}
               showAdminLinks={false}
             />
           </div>
@@ -397,12 +433,12 @@ export default function PublicPage() {
       {/* Complaint Modal */}
       <Modal
         isOpen={complaintOpen}
-        onClose={() => { setComplaintOpen(false); setComplaintSent(false); setComplaint({ stall: "", desc: "", cat: "Sanitation", image: null }); }}
+        onClose={() => { setComplaintOpen(false); setComplaintSent(false); setComplaint({ stall: "", email: "", desc: "", cat: "Sanitation", image: null }); }}
         title="Report a Market Issue"
         footer={complaintSent ? undefined : (
           <>
             <button className="btn btn-ghost" onClick={() => setComplaintOpen(false)}>Cancel</button>
-            <button className="btn btn-danger" onClick={() => setComplaintSent(true)} disabled={!complaint.desc.trim()}>
+            <button className="btn btn-danger" onClick={() => setComplaintSent(true)} disabled={!complaint.desc.trim() || !complaint.email.trim()}>
               <Send size={14} /> Submit Report
             </button>
           </>
@@ -433,6 +469,12 @@ export default function PublicPage() {
                 <option>Food Safety</option>
                 <option>Other</option>
               </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label form-label-required" htmlFor="pub-email">Your Email</label>
+              <input id="pub-email" type="email" className="form-input" placeholder="For updates regarding your complaint..."
+                aria-required="true"
+                value={complaint.email} onChange={(e) => setComplaint((p) => ({ ...p, email: e.target.value }))} />
             </div>
             <div className="form-group">
               <label className="form-label form-label-required" htmlFor="pub-desc">Describe the Issue</label>

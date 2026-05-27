@@ -38,6 +38,7 @@ export default function ReportsPage() {
   const [startDate, setStartDate] = useState("2026-03-01");
   const [endDate, setEndDate]     = useState("2026-03-24");
   const [section, setSection]     = useState("All");
+  const [summaryPeriod, setSummaryPeriod] = useState("monthly");
   const [generated, setGenerated] = useState(true);
 
   return (
@@ -67,7 +68,7 @@ export default function ReportsPage() {
           <Filter size={18} style={{color:"var(--text-muted)"}} />
         </div>
         <div className="card-body">
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"var(--space-4)",flexWrap:"wrap"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:"var(--space-4)",flexWrap:"wrap"}} className="no-print">
             <div className="form-group">
               <label className="form-label" htmlFor="rpt-type">Report Type</label>
               <select id="rpt-type" className="form-select" value={reportType}
@@ -100,8 +101,17 @@ export default function ReportsPage() {
                 <option>Cooked Food</option>
               </select>
             </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="rpt-period">Summary Period</label>
+              <select id="rpt-period" className="form-select" value={summaryPeriod}
+                onChange={(e) => { setSummaryPeriod(e.target.value); setGenerated(false); }}>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
           </div>
-          <div style={{display:"flex",justifyContent:"flex-end",marginTop:"var(--space-4)"}}>
+          <div style={{display:"flex",justifyContent:"flex-end",marginTop:"var(--space-4)"}} className="no-print">
             <button className="btn btn-accent" onClick={() => setGenerated(true)}>
               <BarChart2 size={15} /> Generate Report
             </button>
@@ -129,7 +139,7 @@ export default function ReportsPage() {
                 {reportType === "vendors" && "Vendor Compliance Report"}
               </div>
               <div style={{opacity:0.75,fontSize:"var(--text-sm)",marginTop:"var(--space-1)"}}>
-                Period: {startDate} — {endDate} · Section: {section}
+                Period: {startDate} — {endDate} · Section: {section} · Summary: <span style={{textTransform:"capitalize"}}>{summaryPeriod}</span>
               </div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:"var(--space-2)",background:"rgba(255,203,5,0.15)",padding:"var(--space-3) var(--space-5)",borderRadius:"var(--radius-md)"}}>
@@ -269,6 +279,15 @@ export default function ReportsPage() {
           </div>
         </>
       )}
+      <style>{`
+        @media print {
+          .no-print, .page-header-actions, .app-sidebar, header { display: none !important; }
+          .page-header { margin-bottom: 0 !important; }
+          .card { box-shadow: none !important; border: 1px solid #ddd !important; break-inside: avoid; margin-bottom: 1rem !important; }
+          body, .app-shell, .app-main { background: white !important; margin: 0 !important; padding: 0 !important; }
+          .grid-2 { display: block !important; }
+        }
+      `}</style>
     </AppShell>
   );
 }

@@ -36,6 +36,7 @@ const STATUSES = ["All", "closed", "rented", "storage", "ambulant", "vacant", "o
 
 export default function MapPage() {
   const [selectedStallId, setSelectedStallId] = useState<string | null>(null);
+  const [focusTrigger, setFocusTrigger] = useState(0);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState<string>("All");
@@ -61,6 +62,8 @@ export default function MapPage() {
             selectedStallId={selectedStallId} 
             onStallSelect={(s) => setSelectedStallId(s ? s.id : null)}
             showAdminLinks={true}
+            padding={{ top: 20, right: 360, bottom: 20, left: 280 }}
+            focusTrigger={focusTrigger}
           />
         </div>
 
@@ -149,7 +152,10 @@ export default function MapPage() {
                 const conf = STATUS_MAP[stall.status];
                 const isSelected = selectedStallId === stall.id;
                 return (
-                  <button key={stall.id} onClick={() => setSelectedStallId(stall.id)}
+                  <button key={stall.id} onClick={() => {
+                    setSelectedStallId(stall.id);
+                    setFocusTrigger(prev => prev + 1);
+                  }}
                     style={{
                       width: "100%", padding: "12px 14px",
                       textAlign: "left",

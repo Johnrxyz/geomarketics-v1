@@ -7,21 +7,21 @@ import { Search, Filter, Download, Plus, MoreVertical, AlertTriangle, CheckCircl
 
 // ─── Data Source (Accurate with Map and Sanitation) ──────────────────────────
 const VENDORS = [
-  { id: "v1", stall: "A-01", section: "Section A", category: "Vegetables", name: "Maria Santos",   status: "occupied", violations: 0 },
-  { id: "v2", stall: "A-02", section: "Section A", category: "Vegetables", name: "—",              status: "vacant",   violations: 0 },
-  { id: "v3", stall: "A-03", section: "Section A", category: "Vegetables", name: "Luis Reyes",     status: "occupied", violations: 0 },
-  { id: "v4", stall: "A-04", section: "Section A", category: "Vegetables", name: "Juan dela Cruz", status: "flagged",  violations: 3 },
-  { id: "v5", stall: "B-01", section: "Section B", category: "Meat",       name: "Pedro Garcia",   status: "occupied", violations: 0 },
-  { id: "v6", stall: "B-02", section: "Section B", category: "Meat",       name: "—",              status: "vacant",   violations: 0 },
-  { id: "v7", stall: "B-03", section: "Section B", category: "Meat",       name: "Ana Torres",     status: "reserved", violations: 0 },
-  { id: "v8", stall: "B-12", section: "Section B", category: "Meat",       name: "Rosa Navarro",   status: "flagged",  violations: 2 },
-  { id: "v9", stall: "C-01", section: "Section C", category: "Fish",       name: "Carlo Mendoza",  status: "occupied", violations: 2 },
-  { id: "v10", stall: "C-02", section: "Section C", category: "Fish",      name: "Elena Flores",   status: "occupied", violations: 1 },
-  { id: "v11", stall: "C-03", section: "Section C", category: "Fish",      name: "—",              status: "vacant",   violations: 0 },
-  { id: "v12", stall: "D-01", section: "Dry Goods", category: "Dry Goods", name: "Ben Castillo",   status: "occupied", violations: 0 },
-  { id: "v13", stall: "D-02", section: "Dry Goods", category: "Dry Goods", name: "—",              status: "vacant",   violations: 0 },
-  { id: "v14", stall: "E-01", section: "Cooked Food", category: "Food",    name: "Nena Cruz",      status: "occupied", violations: 0 },
-  { id: "v15", stall: "E-02", section: "Cooked Food", category: "Food",    name: "Tony Ramos",     status: "occupied", violations: 0 },
+  { id: "v1", stall: "A-01", section: "Section A", category: "Vegetables", name: "Maria Santos", status: "occupied", violations: 0 },
+  { id: "v2", stall: "A-02", section: "Section A", category: "Vegetables", name: "—", status: "vacant", violations: 0 },
+  { id: "v3", stall: "A-03", section: "Section A", category: "Vegetables", name: "Luis Reyes", status: "occupied", violations: 0 },
+  { id: "v4", stall: "A-04", section: "Section A", category: "Vegetables", name: "Juan dela Cruz", status: "flagged", violations: 3 },
+  { id: "v5", stall: "B-01", section: "Section B", category: "Meat", name: "Pedro Garcia", status: "occupied", violations: 0 },
+  { id: "v6", stall: "B-02", section: "Section B", category: "Meat", name: "—", status: "vacant", violations: 0 },
+  { id: "v7", stall: "B-03", section: "Section B", category: "Meat", name: "Ana Torres", status: "reserved", violations: 0 },
+  { id: "v8", stall: "B-12", section: "Section B", category: "Meat", name: "Rosa Navarro", status: "flagged", violations: 2 },
+  { id: "v9", stall: "C-01", section: "Section C", category: "Fish", name: "Carlo Mendoza", status: "occupied", violations: 2 },
+  { id: "v10", stall: "C-02", section: "Section C", category: "Fish", name: "Elena Flores", status: "occupied", violations: 1 },
+  { id: "v11", stall: "C-03", section: "Section C", category: "Fish", name: "—", status: "vacant", violations: 0 },
+  { id: "v12", stall: "D-01", section: "Dry Goods", category: "Dry Goods", name: "Ben Castillo", status: "occupied", violations: 0 },
+  { id: "v13", stall: "D-02", section: "Dry Goods", category: "Dry Goods", name: "—", status: "vacant", violations: 0 },
+  { id: "v14", stall: "E-01", section: "Cooked Food", category: "Food", name: "Nena Cruz", status: "occupied", violations: 0 },
+  { id: "v15", stall: "E-02", section: "Cooked Food", category: "Food", name: "Tony Ramos", status: "occupied", violations: 0 },
 ];
 
 export default function VendorManagementPage() {
@@ -30,8 +30,8 @@ export default function VendorManagementPage() {
   const [filterStatus, setFilterStatus] = useState("All");
 
   const filteredVendors = VENDORS.filter(v => {
-    const sMatch = !search || 
-      v.name.toLowerCase().includes(search.toLowerCase()) || 
+    const sMatch = !search ||
+      v.name.toLowerCase().includes(search.toLowerCase()) ||
       v.stall.toLowerCase().includes(search.toLowerCase());
     const secMatch = filterSection === "All" || v.section === filterSection;
     const statMatch = filterStatus === "All" || v.status === filterStatus;
@@ -61,13 +61,13 @@ export default function VendorManagementPage() {
       <div className="card" style={{ display: "flex", flexDirection: "column", minHeight: 0, boxShadow: "var(--shadow-lg)", border: "1px solid var(--border-color)" }}>
         {/* Table Controls */}
         <div className="card-header" style={{ padding: "var(--space-6)", borderBottom: "1px solid var(--border-color)", display: "flex", gap: "var(--space-6)", flexWrap: "wrap", alignItems: "flex-end", background: "#fcfcfc" }}>
-          
+
           <div className="search-input-wrapper" style={{ flex: "1 1 400px", position: "relative" }}>
             <Search size={18} className="search-icon" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-            <input 
-              type="search" 
-              className="search-input" 
-              placeholder="Search by vendor name or stall number..." 
+            <input
+              type="search"
+              className="search-input"
+              placeholder="Search by vendor name or stall number..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ paddingLeft: 40, height: 44, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", width: "100%", fontSize: "var(--text-sm)" }}
@@ -79,8 +79,8 @@ export default function VendorManagementPage() {
               <label className="form-label" style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>Section</label>
               <div style={{ position: "relative" }}>
                 <Filter size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
-                <select 
-                  className="form-select" 
+                <select
+                  className="form-select"
                   style={{ paddingLeft: 36, height: 40, fontSize: "13px", minWidth: 160, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)" }}
                   value={filterSection}
                   onChange={(e) => setFilterSection(e.target.value)}
@@ -94,8 +94,8 @@ export default function VendorManagementPage() {
               <label className="form-label" style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>Stall Status</label>
               <div style={{ position: "relative" }}>
                 <Filter size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
-                <select 
-                  className="form-select" 
+                <select
+                  className="form-select"
                   style={{ paddingLeft: 36, height: 40, fontSize: "13px", minWidth: 160, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)" }}
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
@@ -137,7 +137,7 @@ export default function VendorManagementPage() {
                       {vendor.stall}
                     </td>
                     <td style={{ padding: "var(--space-5) var(--space-6)", fontWeight: 600, color: vendor.name === "—" ? "var(--text-muted)" : "#111827", fontSize: "15px" }}>
-                      {vendor.name === "—" ? "Unassigned" : vendor.name}
+                      {vendor.name === "—" ? "Vacant" : vendor.name}
                     </td>
                     <td style={{ padding: "var(--space-5) var(--space-6)" }}>
                       <div style={{ fontSize: "14px", fontWeight: 600 }}>{vendor.section}</div>
