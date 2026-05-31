@@ -318,7 +318,7 @@ export default function MarketMap({ stalls, selectedStallId, onStallSelect, show
       <div style={{
         position: "absolute",
         bottom: 16,
-        right: 16,
+        right: padding?.right ? padding.right + 16 : 16,
         display: "flex",
         flexDirection: "column",
         gap: 8,

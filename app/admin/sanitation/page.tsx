@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import AppShell from "@/components/layout/AppShell";
 import Modal from "@/components/ui/Modal";
 import { Save, CheckCircle, XCircle, Clock, Download, History, Plus, RotateCcw } from "lucide-react";
+import { sanitationApi, vendorsApi, sectionsApi, getUser } from "@/lib/api";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -90,6 +91,11 @@ const CHECK_LABELS: Record<keyof CheckColumns, string> = {
 };
 
 const STORAGE_KEY = "geomarketics_sanitation_history";
+// CHECK_KEY to API item name mapping
+const CHECK_KEY_TO_NAME: Record<string, string> = {
+  id: "id_verification", uniform: "uniform", hairnet: "hair_net",
+  apron: "apron", boots: "boots", mask: "mask", permit: "business_permit",
+};
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -190,10 +196,28 @@ export default function SanitationPage() {
   const [toast, setToast]       = useState<"saved" | "error" | null>(null);
   const [isDirty, setIsDirty]   = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [apiCheckItems, setApiCheckItems] = useState<Record<string, number>>({});
+  const [apiSectionMap, setApiSectionMap] = useState<Record<string, number>>({});
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const user = getUser();
 
-  // Load history on mount
-  useEffect(() => { setHistory(loadFromStorage()); }, []);
+  // Load history on mount + load API metadata
+  useEffect(() => {
+    setHistory(loadFromStorage());
+    // Fetch check items and sections for API save mapping
+    sanitationApi.checkItems().then((items: unknown) => {
+      const map: Record<string, number> = {};
+      ((items as { name: string; id: number }[]) || []).forEach((item) => { map[item.name] = item.id; });
+      setApiCheckItems(map);
+    }).catch(() => {});
+    sectionsApi.list().then((data: unknown) => {
+      const secs = (data as { results?: { code: string; id: number }[]; } & { code?: string; id?: number }[]);
+      const arr = Array.isArray(secs) ? secs : (secs as { results?: { code: string; id: number }[] }).results || [];
+      const map: Record<string, number> = {};
+      (arr as { code: string; id: number }[]).forEach((s) => { map[s.code] = s.id; });
+      setApiSectionMap(map);
+    }).catch(() => {});
+  }, []);
 
   // Rebuild rows when section changes
   useEffect(() => {
@@ -235,7 +259,7 @@ export default function SanitationPage() {
 
   // ── Save ──────────────────────────────────────────────────────────────────
 
-  const saveChecklist = () => {
+  const saveChecklist = async () => {
     const record: SavedChecklist = {
       id: `cl-${Date.now()}`,
       date,
@@ -250,6 +274,34 @@ export default function SanitationPage() {
     setIsDirty(false);
     resetAll();
     showToast("saved");
+
+    // Also save to API (best-effort)
+    try {
+      const sectionCode = section.replace(" Section", "").trim().charAt(0);
+      const sectionId = apiSectionMap[sectionCode];
+      const session = await sanitationApi.createSession({ date, section: sectionId || null, notes: `Inspector: ${inspector}` }) as { id: number };
+      // Build records for API
+      const apiRecords: unknown[] = [];
+      rows.forEach((row) => {
+        CHECK_KEYS.forEach((key) => {
+          const itemName = CHECK_KEY_TO_NAME[key];
+          const itemId = apiCheckItems[itemName];
+          if (itemId) {
+            apiRecords.push({
+              vendor: parseInt(row.vendorId.replace("v", ""), 10) || null,
+              check_item: itemId,
+              status: row.checks[key] === true ? "pass" : row.checks[key] === false ? "fail" : "na",
+              remarks: row.remarks,
+            });
+          }
+        });
+      });
+      if (apiRecords.length > 0) {
+        await sanitationApi.bulkSave(session.id, apiRecords);
+      }
+    } catch {
+      // API save failed silently — localStorage already saved
+    }
   };
 
   // ── Stats ─────────────────────────────────────────────────────────────────

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import AppShell from "@/components/layout/AppShell";
 import StatusBadge from "@/components/ui/StatusBadge";
 import Modal from "@/components/ui/Modal";
 import { Search, Filter, Eye, CheckCircle, XCircle, FileText, Download } from "lucide-react";
+import { documentsApi } from "@/lib/api";
 
 interface Document {
   id: string;
@@ -17,22 +18,52 @@ interface Document {
   size: string;
 }
 
-const DOCS: Document[] = [
-  { id: "d1",  vendor: "Maria Santos",   stall: "A-01", docType: "Business Permit",        fileName: "business_permit_2026.pdf",    submitted: "Mar 1, 2026",  status: "approved", size: "512 KB" },
-  { id: "d2",  vendor: "Juan dela Cruz", stall: "A-04", docType: "Sanitation Certificate",  fileName: "sanitation_cert_q1.pdf",      submitted: "Mar 3, 2026",  status: "pending",  size: "238 KB" },
-  { id: "d3",  vendor: "Pedro Garcia",   stall: "B-01", docType: "Rent Receipt",            fileName: "rent_march2026.pdf",          submitted: "Mar 5, 2026",  status: "pending",  size: "124 KB" },
-  { id: "d4",  vendor: "Rosa Navarro",   stall: "B-12", docType: "Health Certificate",      fileName: "health_cert_navarro.pdf",     submitted: "Mar 6, 2026",  status: "rejected", size: "340 KB" },
-  { id: "d5",  vendor: "Ana Torres",     stall: "B-03", docType: "Business Permit",         fileName: "business_permit_torres.pdf",  submitted: "Mar 8, 2026",  status: "approved", size: "490 KB" },
-  { id: "d6",  vendor: "Carlo Mendoza",  stall: "C-01", docType: "Rent Receipt",            fileName: "rent_receipt_mendoza.pdf",    submitted: "Mar 10, 2026", status: "pending",  size: "115 KB" },
-  { id: "d7",  vendor: "Elena Flores",   stall: "C-02", docType: "Tax Clearance",           fileName: "tax_clearance_flores.pdf",    submitted: "Mar 12, 2026", status: "approved", size: "620 KB" },
-  { id: "d8",  vendor: "Ben Castillo",   stall: "D-01", docType: "Business Permit",         fileName: "permit_castillo_2026.pdf",    submitted: "Mar 15, 2026", status: "pending",  size: "480 KB" },
-];
+function formatDate(dateStr: string): string {
+  if (!dateStr) return "—";
+  try {
+    return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return dateStr;
+  }
+}
 
 export default function DocumentsPage() {
-  const [docs, setDocs]           = useState<Document[]>(DOCS);
-  const [search, setSearch]       = useState("");
+  const [docs, setDocs] = useState<Document[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
+  const [reviewNotes, setReviewNotes] = useState("");
+  const [actioning, setActioning] = useState(false);
+
+  const fetchDocs = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    documentsApi.list()
+      .then((data: any) => {
+        const results = data?.results ?? data ?? [];
+        const mapped: Document[] = results.map((d: any) => ({
+          id: d.id?.toString() ?? "—",
+          vendor: d.vendor_name ?? d.vendor ?? "—",
+          stall: d.stall_number ?? d.stall ?? "—",
+          docType: d.document_type ?? d.doc_type ?? d.docType ?? "Document",
+          fileName: d.file_name ?? d.fileName ?? d.file ?? "document.pdf",
+          submitted: formatDate(d.submitted_at ?? d.created_at ?? d.submitted ?? ""),
+          status: (d.status ?? "pending").toLowerCase() as Document["status"],
+          size: d.file_size ?? d.size ?? "—",
+        }));
+        setDocs(mapped);
+      })
+      .catch((err: any) => {
+        setError(err?.detail ?? err?.message ?? "Failed to load documents.");
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    fetchDocs();
+  }, [fetchDocs]);
 
   const filtered = docs.filter((d) => {
     const matchSearch = search === "" ||
@@ -43,9 +74,22 @@ export default function DocumentsPage() {
     return matchSearch && matchStatus;
   });
 
-  const updateStatus = (id: string, status: "approved" | "rejected") => {
-    setDocs((prev) => prev.map((d) => d.id === id ? { ...d, status } : d));
-    setPreviewDoc(null);
+  const updateStatus = async (id: string, status: "approved" | "rejected") => {
+    setActioning(true);
+    try {
+      if (status === "approved") {
+        await documentsApi.approve(id, reviewNotes || undefined);
+      } else {
+        await documentsApi.reject(id, reviewNotes || undefined);
+      }
+      setDocs((prev) => prev.map((d) => d.id === id ? { ...d, status } : d));
+      setPreviewDoc(null);
+      setReviewNotes("");
+    } catch (err: any) {
+      alert(err?.detail ?? err?.message ?? `Failed to ${status} document.`);
+    } finally {
+      setActioning(false);
+    }
   };
 
   const pending  = docs.filter((d) => d.status === "pending").length;
@@ -77,7 +121,7 @@ export default function DocumentsPage() {
               display:"flex",alignItems:"center",justifyContent:"center",color,flexShrink:0
             }} aria-hidden="true">{icon}</div>
             <div>
-              <div style={{fontSize:"var(--text-2xl)",fontWeight:800}}>{value}</div>
+              <div style={{fontSize:"var(--text-2xl)",fontWeight:800}}>{loading ? "…" : value}</div>
               <div style={{fontSize:"var(--text-sm)",color:"var(--text-secondary)"}}>{label}</div>
             </div>
           </div>
@@ -120,7 +164,11 @@ export default function DocumentsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {loading ? (
+                <tr><td colSpan={8} style={{textAlign:"center",padding:"var(--space-10)",color:"var(--text-muted)"}}>Loading...</td></tr>
+              ) : error ? (
+                <tr><td colSpan={8} style={{textAlign:"center",padding:"var(--space-10)",color:"var(--color-error)"}}>{error}</td></tr>
+              ) : filtered.length === 0 ? (
                 <tr><td colSpan={8} style={{textAlign:"center",padding:"var(--space-10)",color:"var(--text-muted)"}}>No documents found.</td></tr>
               ) : filtered.map((doc) => (
                 <tr key={doc.id}>
@@ -146,15 +194,15 @@ export default function DocumentsPage() {
                   </td>
                   <td>
                     <div className="table-actions">
-                      <button className="btn btn-ghost btn-sm" onClick={() => setPreviewDoc(doc)} aria-label={`Preview ${doc.fileName}`}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setPreviewDoc(doc); setReviewNotes(""); }} aria-label={`Preview ${doc.fileName}`}>
                         <Eye size={13} /> Preview
                       </button>
                       {doc.status === "pending" && (
                         <>
-                          <button className="btn btn-success btn-sm" onClick={() => updateStatus(doc.id, "approved")} aria-label={`Approve ${doc.fileName}`}>
+                          <button className="btn btn-success btn-sm" onClick={() => updateStatus(doc.id, "approved")} aria-label={`Approve ${doc.fileName}`} disabled={actioning}>
                             <CheckCircle size={13} /> Approve
                           </button>
-                          <button className="btn btn-danger btn-sm" onClick={() => updateStatus(doc.id, "rejected")} aria-label={`Reject ${doc.fileName}`}>
+                          <button className="btn btn-danger btn-sm" onClick={() => updateStatus(doc.id, "rejected")} aria-label={`Reject ${doc.fileName}`} disabled={actioning}>
                             <XCircle size={13} /> Reject
                           </button>
                         </>
@@ -171,22 +219,22 @@ export default function DocumentsPage() {
       {/* Preview Modal */}
       <Modal
         isOpen={!!previewDoc}
-        onClose={() => setPreviewDoc(null)}
+        onClose={() => { setPreviewDoc(null); setReviewNotes(""); }}
         title={`Document Preview — ${previewDoc?.fileName ?? ""}`}
         size="lg"
         footer={
           <>
             {previewDoc?.status === "pending" && (
               <>
-                <button className="btn btn-danger" onClick={() => updateStatus(previewDoc!.id, "rejected")}>
+                <button className="btn btn-danger" onClick={() => updateStatus(previewDoc!.id, "rejected")} disabled={actioning}>
                   <XCircle size={15} /> Reject
                 </button>
-                <button className="btn btn-success" onClick={() => updateStatus(previewDoc!.id, "approved")}>
+                <button className="btn btn-success" onClick={() => updateStatus(previewDoc!.id, "approved")} disabled={actioning}>
                   <CheckCircle size={15} /> Approve
                 </button>
               </>
             )}
-            <button className="btn btn-ghost" onClick={() => setPreviewDoc(null)}>Close</button>
+            <button className="btn btn-ghost" onClick={() => { setPreviewDoc(null); setReviewNotes(""); }}>Close</button>
           </>
         }
       >
@@ -230,7 +278,14 @@ export default function DocumentsPage() {
 
             <div style={{marginTop:"var(--space-4)"}}>
               <label className="form-label" htmlFor="review-notes">Review Notes (optional)</label>
-              <textarea id="review-notes" className="form-textarea" placeholder="Add notes about this document…" rows={2} />
+              <textarea
+                id="review-notes"
+                className="form-textarea"
+                placeholder="Add notes about this document…"
+                rows={2}
+                value={reviewNotes}
+                onChange={(e) => setReviewNotes(e.target.value)}
+              />
             </div>
           </div>
         )}

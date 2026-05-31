@@ -1,35 +1,55 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AppShell from "@/components/layout/AppShell";
 import StatusBadge from "@/components/ui/StatusBadge";
 import { Search, Filter, Download, Plus, MoreVertical, AlertTriangle, CheckCircle } from "lucide-react";
+import { vendorsApi } from "@/lib/api";
 
-// ─── Data Source (Accurate with Map and Sanitation) ──────────────────────────
-const VENDORS = [
-  { id: "v1", stall: "A-01", section: "Section A", category: "Vegetables", name: "Maria Santos", status: "occupied", violations: 0 },
-  { id: "v2", stall: "A-02", section: "Section A", category: "Vegetables", name: "—", status: "vacant", violations: 0 },
-  { id: "v3", stall: "A-03", section: "Section A", category: "Vegetables", name: "Luis Reyes", status: "occupied", violations: 0 },
-  { id: "v4", stall: "A-04", section: "Section A", category: "Vegetables", name: "Juan dela Cruz", status: "flagged", violations: 3 },
-  { id: "v5", stall: "B-01", section: "Section B", category: "Meat", name: "Pedro Garcia", status: "occupied", violations: 0 },
-  { id: "v6", stall: "B-02", section: "Section B", category: "Meat", name: "—", status: "vacant", violations: 0 },
-  { id: "v7", stall: "B-03", section: "Section B", category: "Meat", name: "Ana Torres", status: "reserved", violations: 0 },
-  { id: "v8", stall: "B-12", section: "Section B", category: "Meat", name: "Rosa Navarro", status: "flagged", violations: 2 },
-  { id: "v9", stall: "C-01", section: "Section C", category: "Fish", name: "Carlo Mendoza", status: "occupied", violations: 2 },
-  { id: "v10", stall: "C-02", section: "Section C", category: "Fish", name: "Elena Flores", status: "occupied", violations: 1 },
-  { id: "v11", stall: "C-03", section: "Section C", category: "Fish", name: "—", status: "vacant", violations: 0 },
-  { id: "v12", stall: "D-01", section: "Dry Goods", category: "Dry Goods", name: "Ben Castillo", status: "occupied", violations: 0 },
-  { id: "v13", stall: "D-02", section: "Dry Goods", category: "Dry Goods", name: "—", status: "vacant", violations: 0 },
-  { id: "v14", stall: "E-01", section: "Cooked Food", category: "Food", name: "Nena Cruz", status: "occupied", violations: 0 },
-  { id: "v15", stall: "E-02", section: "Cooked Food", category: "Food", name: "Tony Ramos", status: "occupied", violations: 0 },
-];
+interface Vendor {
+  id: string | number;
+  stall: string;
+  section: string;
+  category: string;
+  name: string;
+  status: string;
+  violations: number;
+}
 
 export default function VendorManagementPage() {
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterSection, setFilterSection] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
 
-  const filteredVendors = VENDORS.filter(v => {
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    vendorsApi.list()
+      .then((data: any) => {
+        const results = data?.results ?? data ?? [];
+        const mapped: Vendor[] = results.map((v: any) => ({
+          id: v.id,
+          stall: v.stall_number ?? "—",
+          section: v.section_name ?? "—",
+          category: v.category ?? "—",
+          name: v.full_name ?? "—",
+          status: (v.stall?.status ?? v.stall_status ?? "vacant").toLowerCase(),
+          violations: typeof v.compliance_rate === "number"
+            ? (v.compliance_rate < 100 ? Math.round((100 - v.compliance_rate) / 10) : 0)
+            : 0,
+        }));
+        setVendors(mapped);
+      })
+      .catch((err: any) => {
+        setError(err?.detail ?? err?.message ?? "Failed to load vendors.");
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filteredVendors = vendors.filter(v => {
     const sMatch = !search ||
       v.name.toLowerCase().includes(search.toLowerCase()) ||
       v.stall.toLowerCase().includes(search.toLowerCase());
@@ -38,7 +58,7 @@ export default function VendorManagementPage() {
     return sMatch && secMatch && statMatch;
   });
 
-  const uniqueSections = ["All", ...Array.from(new Set(VENDORS.map(v => v.section)))];
+  const uniqueSections = ["All", ...Array.from(new Set(vendors.map(v => v.section)))];
   const uniqueStatuses = ["All", "occupied", "vacant", "flagged", "reserved"];
 
   return (
@@ -123,7 +143,19 @@ export default function VendorManagementPage() {
               </tr>
             </thead>
             <tbody className="table-hover">
-              {filteredVendors.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={6} align="center" style={{ padding: "var(--space-12)", color: "var(--text-muted)", fontSize: "var(--text-md)" }}>
+                    Loading...
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={6} align="center" style={{ padding: "var(--space-12)", color: "var(--color-error)", fontSize: "var(--text-md)" }}>
+                    {error}
+                  </td>
+                </tr>
+              ) : filteredVendors.length === 0 ? (
                 <tr>
                   <td colSpan={6} align="center" style={{ padding: "var(--space-12)", color: "var(--text-muted)", fontSize: "var(--text-md)" }}>
                     <AlertTriangle size={32} style={{ marginBottom: "var(--space-3)", opacity: 0.3 }} />
@@ -173,7 +205,7 @@ export default function VendorManagementPage() {
 
         {/* Footer Pagination */}
         <div style={{ padding: "var(--space-4) var(--space-6)", borderTop: "1px solid var(--border-color)", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "13px", color: "var(--text-secondary)", background: "#fcfcfc" }}>
-          <div style={{ fontWeight: 500 }}>Showing <strong>{filteredVendors.length}</strong> of <strong>{VENDORS.length}</strong> entries</div>
+          <div style={{ fontWeight: 500 }}>Showing <strong>{filteredVendors.length}</strong> of <strong>{vendors.length}</strong> entries</div>
           <div style={{ display: "flex", gap: "var(--space-2)" }}>
             <button className="btn btn-ghost btn-sm" disabled style={{ border: "1px solid var(--border-color)", padding: "4px 12px" }}>Previous</button>
             <button className="btn btn-ghost btn-sm" disabled style={{ border: "1px solid var(--border-color)", padding: "4px 12px" }}>Next</button>

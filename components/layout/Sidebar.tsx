@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Map, Store, AlertCircle,
-  TrendingUp, BarChart2, Globe, Users,
+  BarChart2, Globe, Users, FileText,
   ChevronLeft, ChevronRight, LogOut, ClipboardCheck
 } from "lucide-react";
 
@@ -21,17 +21,16 @@ const adminNav: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard size={18} /> },
   { label: "Market Map", href: "/map", icon: <Map size={18} /> },
   { label: "Vendor Management", href: "/admin/vendors", icon: <Users size={18} /> },
-  // { label: "Documents",          href: "/admin/documents",    icon: <FileText size={18} /> },
+  { label: "Documents", href: "/admin/documents", icon: <FileText size={18} /> },
   { label: "Sanitation", href: "/admin/sanitation", icon: <ClipboardCheck size={18} /> },
   { label: "Complaints", href: "/admin/complaints", icon: <AlertCircle size={18} /> },
-  { label: "Price Monitoring", href: "/admin/prices", icon: <TrendingUp size={18} /> },
   { label: "Reports", href: "/admin/reports", icon: <BarChart2 size={18} /> },
 ];
 
 const vendorNav: NavItem[] = [
   { label: "My Profile", href: "/vendor/profile", icon: <Store size={18} /> },
   { label: "Market Map", href: "/map", icon: <Map size={18} /> },
-  { label: "Complaints", href: "/admin/complaints", icon: <AlertCircle size={18} /> },
+  { label: "Complaints", href: "/vendor/complaints", icon: <AlertCircle size={18} /> },
 ];
 
 interface SidebarProps {

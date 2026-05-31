@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import AppShell from "@/components/layout/AppShell";
 import Modal from "@/components/ui/Modal";
 import {
   Search, Plus, AlertCircle, Clock, CheckCircle, Filter,
   MessageSquare, Store, Calendar, ChevronRight, Send
 } from "lucide-react";
+import { complaintsApi } from "@/lib/api";
+import { useAuthGuard } from "@/lib/useAuthGuard";
 
 interface Complaint {
   id: string;
@@ -21,15 +23,6 @@ interface Complaint {
   notes?: string;
 }
 
-const COMPLAINTS: Complaint[] = [
-  { id: "CMP-001", stall: "B-12", vendor: "Rosa Navarro", section: "Section B", category: "Sanitation", description: "Unsanitary meat display — live insects observed around stall area during inspection.", status: "open", date: "Mar 23, 2026", reporter: "Inspector Cruz", notes: "" },
-  { id: "CMP-002", stall: "A-04", vendor: "Juan dela Cruz", section: "Section A", category: "Overpricing", description: "Consumer reported fish sold at ₱280/kg, significantly above observed price of ₱185/kg.", status: "reviewing", date: "Mar 22, 2026", reporter: "Anonymous Consumer", notes: "Price verification in progress." },
-  { id: "CMP-003", stall: "C-08", vendor: "Rosa Navarro", section: "Section C", category: "Safety Hazard", description: "Vendor blocking emergency exit with boxes during peak hours.", status: "resolved", date: "Mar 21, 2026", reporter: "Market Guard", notes: "Vendor warned and complied." },
-  { id: "CMP-004", stall: "E-01", vendor: "Nena Cruz", section: "Cooked Food", category: "Food Safety", description: "Cooked food exposed without proper covering, attracting flies.", status: "open", date: "Mar 20, 2026", reporter: "Consumer App", notes: "" },
-  { id: "CMP-005", stall: "A-01", vendor: "Maria Santos", section: "Section A", category: "Display Violation", description: "Display items exceeding designated stall boundaries.", status: "reviewing", date: "Mar 18, 2026", reporter: "Section A Officer", notes: "Measurement pending." },
-  { id: "CMP-006", stall: "D-01", vendor: "Ben Castillo", section: "Dry Goods", category: "Permit Violation", description: "Business permit not visible / posted in required location.", status: "resolved", date: "Mar 15, 2026", reporter: "Inspector Reyes", notes: "Permit posted. Case closed." },
-];
-
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   open: <AlertCircle size={14} />,
   reviewing: <Clock size={14} />,
@@ -42,8 +35,22 @@ const STATUS_COLORS: Record<string, string> = {
   resolved: "badge-resolved",
 };
 
+function formatDate(dateStr: string): string {
+  if (!dateStr) return "—";
+  try {
+    return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return dateStr;
+  }
+}
+
 export default function ComplaintsPage() {
-  const [complaints, setComplaints] = useState<Complaint[]>(COMPLAINTS);
+  const { ready, user } = useAuthGuard("admin");
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summary, setSummary] = useState<{ open: number; reviewing: number; resolved: number }>({ open: 0, reviewing: 0, resolved: 0 });
   const [selected, setSelected] = useState<Complaint | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -52,6 +59,62 @@ export default function ComplaintsPage() {
   const [newComplaint, setNewComplaint] = useState({
     stall: "", description: "", category: "Sanitation"
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [updating, setUpdating] = useState(false);
+
+  const fetchComplaints = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    complaintsApi.list()
+      .then((data: any) => {
+        const results = data?.results ?? data ?? [];
+        const mapped: Complaint[] = results.map((c: any) => ({
+          id: c.id?.toString() ?? "—",
+          stall: c.stall_number ?? c.stall ?? "—",
+          vendor: c.vendor_name ?? c.vendor ?? "—",
+          section: c.section_name ?? c.section ?? "—",
+          category: c.category ?? "Other",
+          description: c.description ?? "",
+          status: (c.status ?? "open").toLowerCase() as Complaint["status"],
+          date: formatDate(c.created_at ?? c.date ?? ""),
+          reporter: c.reporter_name ?? c.reporter ?? "Anonymous",
+          notes: c.admin_notes ?? c.notes ?? "",
+        }));
+        setComplaints(mapped);
+      })
+      .catch((err: any) => {
+        setError(err?.detail ?? err?.message ?? "Failed to load complaints.");
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const fetchSummary = useCallback(() => {
+    setSummaryLoading(true);
+    complaintsApi.summary()
+      .then((data: any) => {
+        setSummary({
+          open: data?.open ?? 0,
+          reviewing: data?.reviewing ?? data?.in_review ?? 0,
+          resolved: data?.resolved ?? 0,
+        });
+      })
+      .catch(() => {
+        // Summary failure is non-critical; derive from list on error
+      })
+      .finally(() => setSummaryLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (ready) {
+      fetchComplaints();
+      fetchSummary();
+    }
+  }, [ready, fetchComplaints, fetchSummary]);
+
+  // Derive summary counts from local list when API summary is unavailable
+  const open = summary.open || complaints.filter((c) => c.status === "open").length;
+  const reviewing = summary.reviewing || complaints.filter((c) => c.status === "reviewing").length;
+  const resolved = summary.resolved || complaints.filter((c) => c.status === "resolved").length;
 
   const filtered = complaints.filter((c) => {
     const s = search.toLowerCase();
@@ -64,36 +127,57 @@ export default function ComplaintsPage() {
     return matchSearch && matchStatus;
   });
 
-  const updateStatus = (id: string, status: "open" | "reviewing" | "resolved") => {
-    setComplaints((prev) => prev.map((c) => c.id === id ? { ...c, status, notes: newNote || c.notes } : c));
-    if (selected?.id === id) setSelected((prev) => prev ? { ...prev, status } : null);
-    setNewNote("");
+  const updateStatus = async (id: string, status: "open" | "reviewing" | "resolved") => {
+    setUpdating(true);
+    try {
+      await complaintsApi.updateStatus(id, status, newNote || undefined);
+      setComplaints((prev) => prev.map((c) => c.id === id ? { ...c, status, notes: newNote || c.notes } : c));
+      if (selected?.id === id) setSelected((prev) => prev ? { ...prev, status, notes: newNote || prev.notes } : null);
+      setNewNote("");
+      fetchSummary();
+    } catch (err: any) {
+      alert(err?.detail ?? err?.message ?? "Failed to update status.");
+    } finally {
+      setUpdating(false);
+    }
   };
 
-  const submitComplaint = () => {
-    const c: Complaint = {
-      id: `CMP-00${complaints.length + 1}`,
-      stall: newComplaint.stall || "Unknown",
-      vendor: "—",
-      section: "—",
-      category: newComplaint.category,
-      description: newComplaint.description,
-      status: "open",
-      date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      reporter: "Consumer App",
-      notes: "",
-    };
-    setComplaints((prev) => [c, ...prev]);
-    setNewOpen(false);
-    setNewComplaint({ stall: "", description: "", category: "Sanitation" });
+  const submitComplaint = async () => {
+    if (!newComplaint.description.trim()) return;
+    setSubmitting(true);
+    try {
+      const created: any = await complaintsApi.create({
+        stall_number: newComplaint.stall || undefined,
+        category: newComplaint.category,
+        description: newComplaint.description,
+      });
+      const c: Complaint = {
+        id: created?.id?.toString() ?? `TMP-${Date.now()}`,
+        stall: created?.stall_number ?? newComplaint.stall ?? "Unknown",
+        vendor: created?.vendor_name ?? "—",
+        section: created?.section_name ?? "—",
+        category: created?.category ?? newComplaint.category,
+        description: created?.description ?? newComplaint.description,
+        status: "open",
+        date: formatDate(created?.created_at ?? new Date().toISOString()),
+        reporter: created?.reporter_name ?? "Consumer App",
+        notes: "",
+      };
+      setComplaints((prev) => [c, ...prev]);
+      fetchSummary();
+      setNewOpen(false);
+      setNewComplaint({ stall: "", description: "", category: "Sanitation" });
+    } catch (err: any) {
+      alert(err?.detail ?? err?.message ?? "Failed to submit complaint.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const open = complaints.filter((c) => c.status === "open").length;
-  const reviewing = complaints.filter((c) => c.status === "reviewing").length;
-  const resolved = complaints.filter((c) => c.status === "resolved").length;
+  if (!ready) return null;
 
   return (
-    <AppShell pageTitle="Complaint & Blotter" role="admin" userName="Admin User" userRole="Administrator">
+    <AppShell pageTitle="Complaint & Blotter" role="admin" userName={user?.first_name || "Admin"} userRole="Administrator">
       <div className="page-header">
         <div className="page-header-left">
           <h2 className="page-title">Complaint & Blotter</h2>
@@ -119,7 +203,7 @@ export default function ComplaintsPage() {
           }}>
             <div style={{ width: 44, height: 44, borderRadius: "var(--radius-md)", background: bg, display: "flex", alignItems: "center", justifyContent: "center", color, flexShrink: 0 }}>{icon}</div>
             <div>
-              <div style={{ fontSize: "var(--text-2xl)", fontWeight: 800 }}>{value}</div>
+              <div style={{ fontSize: "var(--text-2xl)", fontWeight: 800 }}>{summaryLoading ? "…" : value}</div>
               <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>{label}</div>
             </div>
           </div>
@@ -147,7 +231,11 @@ export default function ComplaintsPage() {
 
           {/* List */}
           <div className="card" style={{ overflowY: "auto", maxHeight: "calc(100vh - 380px)" }}>
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="empty-state"><div className="empty-state-title">Loading...</div></div>
+            ) : error ? (
+              <div className="empty-state"><div className="empty-state-title" style={{ color: "var(--color-error)" }}>{error}</div></div>
+            ) : filtered.length === 0 ? (
               <div className="empty-state"><div className="empty-state-title">No complaints found</div></div>
             ) : filtered.map((c) => (
               <button
@@ -257,15 +345,15 @@ export default function ComplaintsPage() {
                   </div>
                   <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap" }}>
                     <button className="btn btn-ghost" onClick={() => updateStatus(selected.id, "open")}
-                      disabled={selected.status === "open"}>
+                      disabled={selected.status === "open" || updating}>
                       <AlertCircle size={14} /> Mark Open
                     </button>
                     <button className="btn btn-secondary" onClick={() => updateStatus(selected.id, "reviewing")}
-                      disabled={selected.status === "reviewing"}>
+                      disabled={selected.status === "reviewing" || updating}>
                       <Clock size={14} /> Mark Reviewing
                     </button>
                     <button className="btn btn-success" onClick={() => updateStatus(selected.id, "resolved")}
-                      disabled={selected.status === "resolved"}>
+                      disabled={selected.status === "resolved" || updating}>
                       <CheckCircle size={14} /> Mark Resolved
                     </button>
                   </div>
@@ -281,8 +369,8 @@ export default function ComplaintsPage() {
         footer={
           <>
             <button className="btn btn-ghost" onClick={() => setNewOpen(false)}>Cancel</button>
-            <button className="btn btn-danger" onClick={submitComplaint} disabled={!newComplaint.description.trim()}>
-              <Send size={14} /> Submit Complaint
+            <button className="btn btn-danger" onClick={submitComplaint} disabled={!newComplaint.description.trim() || submitting}>
+              <Send size={14} /> {submitting ? "Submitting…" : "Submit Complaint"}
             </button>
           </>
         }

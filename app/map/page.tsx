@@ -1,48 +1,107 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { Search, ChevronRight, ChevronDown } from "lucide-react";
 import MarketMap, { MarketStall, STATUS_MAP } from "@/components/map/MarketMap";
+import { stallsApi, getUser } from "@/lib/api";
 
-// ─── Dummy Data ─────────────────────────────────────────────────────────────
+const CATEGORIES = ["All", "Vegetables", "Meat", "Fish", "Dry Goods", "Cooked Food", "Fruits"];
+const STATUSES = ["All", "occupied", "vacant", "reserved", "flagged", "closed", "storage", "ambulant"];
 
-const STALLS: MarketStall[] = [
-  { id: "stall-a01", number: "A-01", section: "Section A", vendor: "Maria Santos", category: "Vegetables", status: "owner", x: 1950, y: 1300 },
-  { id: "stall-a02", number: "A-02", section: "Section A", vendor: "—", category: "Vegetables", status: "vacant", x: 2250, y: 1300 },
-  { id: "stall-a03", number: "A-03", section: "Section A", vendor: "Luis Reyes", category: "Vegetables", status: "closed", x: 2550, y: 1300 },
-  { id: "stall-a04", number: "A-04", section: "Section A", vendor: "Juan dela Cruz", category: "Vegetables", status: "rented", x: 2850, y: 1300 },
-
-  { id: "stall-b01", number: "B-01", section: "Section B", vendor: "Pedro Garcia", category: "Meat", status: "owner", x: 1950, y: 2900 },
-  { id: "stall-b02", number: "B-02", section: "Section B", vendor: "—", category: "Meat", status: "vacant", x: 2250, y: 2900 },
-  { id: "stall-b03", number: "B-03", section: "Section B", vendor: "Ana Torres", category: "Meat", status: "storage", x: 2550, y: 2900 },
-  { id: "stall-b12", number: "B-12", section: "Section B", vendor: "Rosa Navarro", category: "Meat", status: "rented", x: 2850, y: 2900 },
-
-  { id: "stall-c01", number: "C-01", section: "Section C", vendor: "Carlo Mendoza", category: "Fish", status: "owner", x: 4650, y: 1300 },
-  { id: "stall-c02", number: "C-02", section: "Section C", vendor: "Elena Flores", category: "Fish", status: "owner", x: 4950, y: 1300 },
-  { id: "stall-c03", number: "C-03", section: "Section C", vendor: "—", category: "Fish", status: "closed", x: 5250, y: 1300 },
-
-  { id: "stall-d01", number: "D-01", section: "Dry Goods", vendor: "Ben Castillo", category: "Dry Goods", status: "rented", x: 4650, y: 2900 },
-  { id: "stall-d02", number: "D-02", section: "Dry Goods", vendor: "—", category: "Dry Goods", status: "storage", x: 4950, y: 2900 },
-
-  { id: "stall-e01", number: "E-01", section: "Cooked Food", vendor: "Nena Cruz", category: "Food", status: "ambulant", x: 6000, y: 2900 },
-  { id: "stall-e02", number: "E-02", section: "Cooked Food", vendor: "Tony Ramos", category: "Food", status: "ambulant", x: 6300, y: 2900 },
-];
-
-const CATEGORIES = ["All", "Vegetables", "Meat", "Fish", "Dry Goods", "Food"];
-const STATUSES = ["All", "closed", "rented", "storage", "ambulant", "vacant", "owner"];
-
-// ─── Component ───────────────────────────────────────────────────────────────
+// Map backend status to MarketMap component status keys
+const STATUS_REMAP: Record<string, string> = {
+  occupied: "owner",
+  vacant: "vacant",
+  reserved: "storage",
+  flagged: "rented",
+  closed: "closed",
+  storage: "storage",
+  ambulant: "ambulant",
+};
 
 export default function MapPage() {
+  const [stalls, setStalls] = useState<MarketStall[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedStallId, setSelectedStallId] = useState<string | null>(null);
   const [focusTrigger, setFocusTrigger] = useState(0);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [isLegendOpen, setIsLegendOpen] = useState(false);
+  const user = getUser();
 
-  const filtered = STALLS.filter((s) => {
+  const fetchStalls = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await stallsApi.list({ page_size: "100" }) as { results: Record<string, unknown>[] };
+      const items = (data.results || []) as Record<string, unknown>[];
+
+      // ── Auto-layout helper ──────────────────────────────────────────────────
+      // If the backend has real coordinates (non-zero map_x/map_y) use them.
+      // Otherwise auto-arrange stalls in a readable grid per section so they
+      // are never piled up at (0,0).
+      const STALL_W = 200;   // cell width  (px in SVG space)
+      const STALL_H = 120;   // cell height
+      const COLS    = 12;    // stalls per row per section
+      const SEC_PAD = 400;   // vertical gap between sections
+
+      // Group by section to place each section's stalls in a block
+      const sectionIndex: Record<string, number> = {};
+      const sectionCounter: Record<string, number> = {};
+      let secOrder = 0;
+
+      // First pass: discover section order
+      items.forEach((s) => {
+        const sec = String(s.section_code ?? "?");
+        if (!(sec in sectionIndex)) {
+          sectionIndex[sec] = secOrder++;
+          sectionCounter[sec] = 0;
+        }
+      });
+
+      const mapped: MarketStall[] = items.map((s) => {
+        const rawX = s.map_x as number | null;
+        const rawY = s.map_y as number | null;
+        const hasCoords = rawX && rawY && (rawX !== 0 || rawY !== 0);
+
+        let x: number, y: number;
+        if (hasCoords) {
+          x = rawX!;
+          y = rawY!;
+        } else {
+          const sec = String(s.section_code ?? "?");
+          const idx = sectionCounter[sec]++;
+          const col = idx % COLS;
+          const row = Math.floor(idx / COLS);
+          const secRow = sectionIndex[sec];
+          x = 300 + col * (STALL_W + 40);
+          y = 200 + secRow * (SEC_PAD + Math.ceil(Object.keys(sectionIndex).length) * 20) + row * (STALL_H + 30);
+        }
+
+        return {
+          id: `stall-${String(s.stall_number).toLowerCase().replace(/-/g, "")}`,
+          number: s.stall_number as string,
+          section: `Section ${s.section_code}`,
+          vendor: (s.vendor_name as string) || "—",
+          category: s.category as string,
+          status: (STATUS_REMAP[s.status as string] || "vacant") as MarketStall["status"],
+          x,
+          y,
+        };
+      });
+
+      setStalls(mapped);
+    } catch {
+      // fallback to empty
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchStalls(); }, [fetchStalls]);
+
+  const filtered = stalls.filter((s) => {
     const matchSearch = !search ||
       s.number.toLowerCase().includes(search.toLowerCase()) ||
       s.vendor.toLowerCase().includes(search.toLowerCase()) ||
@@ -52,16 +111,18 @@ export default function MapPage() {
     return matchSearch && matchCat && matchStatus;
   });
 
+  const role = user?.role === "admin" ? "admin" : user?.role === "vendor" ? "vendor" : "admin";
+
   return (
-    <AppShell pageTitle="Interactive Market Map" role="admin" userName="Admin User" userRole="Administrator" floatingSidebar={true}>
+    <AppShell pageTitle="Interactive Market Map" role={role} userName={user?.first_name || "User"} userRole="Administrator" floatingSidebar={true}>
       <div style={{ position: "relative", width: "100%", height: "100%" }}>
         {/* ── Interactive SVG Map Container ── */}
         <div style={{ position: "absolute", inset: 0, zIndex: 1 }}>
-          <MarketMap 
-            stalls={STALLS} 
-            selectedStallId={selectedStallId} 
+          <MarketMap
+            stalls={stalls}
+            selectedStallId={selectedStallId}
             onStallSelect={(s) => setSelectedStallId(s ? s.id : null)}
-            showAdminLinks={true}
+            showAdminLinks={role === "admin"}
             padding={{ top: 20, right: 360, bottom: 20, left: 280 }}
             focusTrigger={focusTrigger}
           />
@@ -78,9 +139,9 @@ export default function MapPage() {
           zIndex: 10,
           pointerEvents: "none"
         }} aria-label="Stall filters and list" className="map-filters-aside">
-          
+
           {/* Filters */}
-          <div style={{ 
+          <div style={{
             pointerEvents: "auto",
             background: "rgba(255, 255, 255, 0.8)",
             backdropFilter: "blur(12px)",
@@ -121,11 +182,11 @@ export default function MapPage() {
           </div>
 
           {/* Stall List */}
-          <div style={{ 
-            pointerEvents: "auto", 
-            flex: 1, 
-            minHeight: 0, 
-            display: "flex", 
+          <div style={{
+            pointerEvents: "auto",
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
             flexDirection: "column",
             background: "rgba(255, 255, 255, 0.8)",
             backdropFilter: "blur(12px)",
@@ -140,16 +201,20 @@ export default function MapPage() {
                 STALL DIRECTORY
               </div>
               <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", background: "rgba(0,0,0,0.05)", padding: "2px 8px", borderRadius: "10px" }}>
-                {filtered.length}
+                {loading ? "..." : filtered.length}
               </div>
             </div>
             <div style={{ overflowY: "auto", flex: 1, padding: "8px" }}>
-              {filtered.length === 0 ? (
+              {loading ? (
+                <div className="empty-state" style={{ padding: "var(--space-8)" }}>
+                  <div className="empty-state-title">Loading stalls...</div>
+                </div>
+              ) : filtered.length === 0 ? (
                 <div className="empty-state" style={{ padding: "var(--space-8)" }}>
                   <div className="empty-state-title">No stalls found</div>
                 </div>
               ) : filtered.map((stall) => {
-                const conf = STATUS_MAP[stall.status];
+                const conf = STATUS_MAP[stall.status as keyof typeof STATUS_MAP] || STATUS_MAP["vacant"];
                 const isSelected = selectedStallId === stall.id;
                 return (
                   <button key={stall.id} onClick={() => {
@@ -192,7 +257,7 @@ export default function MapPage() {
           </div>
 
           {/* Legend */}
-          <div style={{ 
+          <div style={{
             pointerEvents: "auto",
             background: "rgba(255, 255, 255, 0.8)",
             backdropFilter: "blur(12px)",
@@ -201,7 +266,7 @@ export default function MapPage() {
             borderRadius: "20px",
             boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
           }}>
-            <button 
+            <button
               onClick={() => setIsLegendOpen(!isLegendOpen)}
               style={{ padding: "16px 20px", width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", border: "none", background: "transparent" }}
               aria-expanded={isLegendOpen}

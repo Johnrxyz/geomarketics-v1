@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, MapPin, AlertCircle, Loader2 } from "lucide-react";
+import { authApi } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
   const [role, setRole] = useState<"admin" | "vendor">("admin");
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -17,24 +18,34 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
 
-    if (!email || !password) {
-      setError("Please enter both email and password.");
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError("Please enter a valid email address.");
+    if (!username || !password) {
+      setError("Please enter both username and password.");
       return;
     }
 
     setLoading(true);
-    // Simulate auth
-    await new Promise((r) => setTimeout(r, 1200));
-    setLoading(false);
+    try {
+      const data = await authApi.login(username, password);
+      const userRole = (data.user as { role: string }).role;
 
-    if (role === "admin") {
-      router.push("/map");
-    } else {
-      router.push("/vendor/profile");
+      if (userRole === "admin") {
+        router.push("/map");
+      } else if (userRole === "vendor") {
+        router.push("/vendor/profile");
+      } else {
+        router.push("/public");
+      }
+    } catch (err: unknown) {
+      const errObj = err as Record<string, unknown>;
+      if (errObj?.non_field_errors) {
+        setError(String((errObj.non_field_errors as string[])[0]));
+      } else if (errObj?.detail) {
+        setError(String(errObj.detail));
+      } else {
+        setError("Login failed. Please check your credentials.");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -70,7 +81,7 @@ export default function LoginPage() {
             <button
               type="button"
               className={`role-btn${role === "admin" ? " active" : ""}`}
-              onClick={() => setRole("admin")}
+              onClick={() => { setRole("admin"); setUsername("admin"); }}
               aria-pressed={role === "admin"}
             >
               Administrator
@@ -78,7 +89,7 @@ export default function LoginPage() {
             <button
               type="button"
               className={`role-btn${role === "vendor" ? " active" : ""}`}
-              onClick={() => setRole("vendor")}
+              onClick={() => { setRole("vendor"); setUsername("maria.santos"); }}
               aria-pressed={role === "vendor"}
             >
               Vendor
@@ -94,20 +105,19 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Email */}
+            {/* Username */}
             <div className="form-group login-field">
-              <label className="form-label" htmlFor="email">Email Address</label>
+              <label className="form-label" htmlFor="username">Username</label>
               <div className="form-input-wrapper">
                 <input
-                  id="email"
-                  type="email"
-                  className={`form-input${error && !email ? " error" : ""}`}
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="email"
+                  id="username"
+                  type="text"
+                  className={`form-input${error && !username ? " error" : ""}`}
+                  placeholder="Enter your username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="username"
                   aria-required="true"
-                  aria-describedby={error ? "login-error" : undefined}
                 />
               </div>
             </div>
@@ -163,7 +173,7 @@ export default function LoginPage() {
 
           {/* Demo hint */}
           <div className="login-demo-hint">
-            <span>Demo: use any valid email format + any password</span>
+            <strong>Demo accounts:</strong> admin / admin123 &nbsp;|&nbsp; maria.santos / vendor123
           </div>
         </div>
 

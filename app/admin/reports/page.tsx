@@ -1,48 +1,81 @@
 "use client";
 
 import AppShell from "@/components/layout/AppShell";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Download, FileText, BarChart2, Filter, Printer, CheckCircle } from "lucide-react";
 import {
   BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
+import { analyticsApi, sectionsApi, getUser } from "@/lib/api";
 
-const occupancyData = [
-  { name: "Occupied", value: 211, color: "#11296B" },
-  { name: "Vacant",   value: 27,  color: "#FFCB05" },
-  { name: "Reserved", value: 7,   color: "#F59E0B" },
-  { name: "Flagged",  value: 3,   color: "#DC2626" },
-];
+interface ReportData {
+  occupancy: { total: number; occupied: number; vacant: number; reserved: number; flagged: number; rate: number };
+  section_report: { code: string; name: string; total: number; occupied: number; vacant: number; reserved: number; occupancy_rate: number }[];
+  complaint_trend: { month: string; count: number }[];
+  complaint_summary: { total: number; open: number; reviewing: number; resolved: number };
+  vendor_compliance: { avg_rate: number; below_70: number };
+}
 
-const sectionData = [
-  { section: "Section A", occupied: 54, vacant: 6 },
-  { section: "Section B", occupied: 40, vacant: 8 },
-  { section: "Section C", occupied: 45, vacant: 7 },
-  { section: "Section D", occupied: 38, vacant: 2 },
-  { section: "Section E", occupied: 22, vacant: 6 },
-  { section: "Dry Goods", occupied: 12, vacant: 8 },
-];
-
-const complaintTrend = [
-  { month: "Oct", total: 18 },
-  { month: "Nov", total: 22 },
-  { month: "Dec", total: 15 },
-  { month: "Jan", total: 28 },
-  { month: "Feb", total: 20 },
-  { month: "Mar", total: 23 },
-];
+const PIE_COLORS = ["#11296B", "#FFCB05", "#F59E0B", "#DC2626"];
 
 export default function ReportsPage() {
   const [reportType, setReportType] = useState("occupancy");
-  const [startDate, setStartDate] = useState("2026-03-01");
-  const [endDate, setEndDate]     = useState("2026-03-24");
-  const [section, setSection]     = useState("All");
+  const [startDate, setStartDate] = useState("2026-01-01");
+  const [endDate, setEndDate]     = useState(new Date().toISOString().split("T")[0]);
+  const [sectionFilter, setSectionFilter] = useState("All");
   const [summaryPeriod, setSummaryPeriod] = useState("monthly");
-  const [generated, setGenerated] = useState(true);
+  const [generated, setGenerated] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [sections, setSections] = useState<{ id: number; code: string; name: string }[]>([]);
+  const user = getUser();
+
+  useEffect(() => {
+    sectionsApi.list().then((data: unknown) => {
+      const results = (data as { results?: { id: number; code: string; name: string }[] }).results || (data as { id: number; code: string; name: string }[]);
+      setSections(Array.isArray(results) ? results : []);
+    }).catch(() => {});
+  }, []);
+
+  const generateReport = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: Record<string, string> = { date_from: startDate, date_to: endDate };
+      if (sectionFilter !== "All") {
+        const sec = sections.find((s) => s.name === sectionFilter || s.code === sectionFilter);
+        if (sec) params.section = String(sec.id);
+      }
+      const data = await analyticsApi.reports(params) as ReportData;
+      setReportData(data);
+      setGenerated(true);
+    } catch {
+      setGenerated(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [startDate, endDate, sectionFilter, sections]);
+
+  const occupancyPie = reportData ? [
+    { name: "Occupied",  value: reportData.occupancy.occupied,  color: PIE_COLORS[0] },
+    { name: "Vacant",    value: reportData.occupancy.vacant,    color: PIE_COLORS[1] },
+    { name: "Reserved",  value: reportData.occupancy.reserved,  color: PIE_COLORS[2] },
+    { name: "Flagged",   value: reportData.occupancy.flagged,   color: PIE_COLORS[3] },
+  ] : [];
+
+  const sectionBarData = (reportData?.section_report ?? []).map((s) => ({
+    section: `Sec ${s.code}`,
+    occupied: s.occupied,
+    vacant: s.vacant,
+  }));
+
+  const complaintTrend = (reportData?.complaint_trend ?? []).map((t) => ({
+    month: t.month,
+    total: t.count,
+  }));
 
   return (
-    <AppShell pageTitle="Reports & Analytics" role="admin" userName="Admin User" userRole="Administrator">
+    <AppShell pageTitle="Reports & Analytics" role="admin" userName={user?.first_name || "Admin"} userRole="Administrator">
       <div className="page-header">
         <div className="page-header-left">
           <h2 className="page-title">Reports & Analytics</h2>
@@ -91,14 +124,10 @@ export default function ReportsPage() {
             </div>
             <div className="form-group">
               <label className="form-label" htmlFor="rpt-section">Section</label>
-              <select id="rpt-section" className="form-select" value={section}
-                onChange={(e) => setSection(e.target.value)}>
+              <select id="rpt-section" className="form-select" value={sectionFilter}
+                onChange={(e) => setSectionFilter(e.target.value)}>
                 <option value="All">All Sections</option>
-                <option>Section A</option>
-                <option>Section B</option>
-                <option>Section C</option>
-                <option>Dry Goods</option>
-                <option>Cooked Food</option>
+                {sections.map((s) => <option key={s.id} value={s.name}>Section {s.code} — {s.name}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -112,14 +141,14 @@ export default function ReportsPage() {
             </div>
           </div>
           <div style={{display:"flex",justifyContent:"flex-end",marginTop:"var(--space-4)"}} className="no-print">
-            <button className="btn btn-accent" onClick={() => setGenerated(true)}>
-              <BarChart2 size={15} /> Generate Report
+            <button className="btn btn-accent" onClick={generateReport} disabled={loading}>
+              <BarChart2 size={15} /> {loading ? "Generating..." : "Generate Report"}
             </button>
           </div>
         </div>
       </div>
 
-      {generated && (
+      {generated && reportData && (
         <>
           {/* Report Summary Banner */}
           <div style={{
@@ -139,7 +168,7 @@ export default function ReportsPage() {
                 {reportType === "vendors" && "Vendor Compliance Report"}
               </div>
               <div style={{opacity:0.75,fontSize:"var(--text-sm)",marginTop:"var(--space-1)"}}>
-                Period: {startDate} — {endDate} · Section: {section} · Summary: <span style={{textTransform:"capitalize"}}>{summaryPeriod}</span>
+                Period: {startDate} — {endDate} · Section: {sectionFilter} · Summary: <span style={{textTransform:"capitalize"}}>{summaryPeriod}</span>
               </div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:"var(--space-2)",background:"rgba(255,203,5,0.15)",padding:"var(--space-3) var(--space-5)",borderRadius:"var(--radius-md)"}}>
@@ -154,13 +183,16 @@ export default function ReportsPage() {
             <div className="card">
               <div className="card-header">
                 <div className="card-title">Stall Status Distribution</div>
+                <div style={{fontSize:"var(--text-sm)",color:"var(--text-muted)"}}>
+                  {reportData.occupancy.total} total stalls · {reportData.occupancy.rate}% occupied
+                </div>
               </div>
               <div className="card-body" style={{paddingTop:0}}>
                 <div className="chart-container">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={occupancyData}
+                        data={occupancyPie}
                         cx="50%"
                         cy="50%"
                         outerRadius={100}
@@ -169,7 +201,7 @@ export default function ReportsPage() {
                         label={({ name, value }) => `${name}: ${value}`}
                         labelLine={true}
                       >
-                        {occupancyData.map((entry, i) => (
+                        {occupancyPie.map((entry, i) => (
                           <Cell key={i} fill={entry.color} />
                         ))}
                       </Pie>
@@ -188,7 +220,7 @@ export default function ReportsPage() {
               <div className="card-body" style={{paddingTop:0}}>
                 <div className="chart-container">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={sectionData}>
+                    <BarChart data={sectionBarData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                       <XAxis dataKey="section" tick={{fontSize:10}} stroke="#D1D5DB" />
                       <YAxis tick={{fontSize:11}} stroke="#D1D5DB" />
@@ -207,6 +239,9 @@ export default function ReportsPage() {
           <div className="card" style={{marginBottom:"var(--space-6)"}}>
             <div className="card-header">
               <div className="card-title">Complaint Trend (6 Months)</div>
+              <div style={{fontSize:"var(--text-sm)",color:"var(--text-muted)"}}>
+                Total: {reportData.complaint_summary.total} · Open: {reportData.complaint_summary.open} · Resolved: {reportData.complaint_summary.resolved}
+              </div>
             </div>
             <div className="card-body" style={{paddingTop:0}}>
               <div style={{height:200}}>
@@ -244,13 +279,12 @@ export default function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sectionData.map((s) => {
-                    const total = s.occupied + s.vacant;
-                    const rate  = Math.round((s.occupied / total) * 100);
+                  {reportData.section_report.map((s) => {
+                    const rate = s.occupancy_rate;
                     return (
-                      <tr key={s.section}>
-                        <td style={{fontWeight:600}}>{s.section}</td>
-                        <td>{total}</td>
+                      <tr key={s.code}>
+                        <td style={{fontWeight:600}}>Section {s.code} — {s.name}</td>
+                        <td>{s.total}</td>
                         <td style={{color:"var(--color-accent)",fontWeight:600}}>{s.occupied}</td>
                         <td style={{color:"var(--color-warning)"}}>{s.vacant}</td>
                         <td>
@@ -277,17 +311,35 @@ export default function ReportsPage() {
               </table>
             </div>
           </div>
+
+          {/* Vendor Compliance Summary */}
+          <div className="card" style={{marginTop:"var(--space-6)"}}>
+            <div className="card-header">
+              <div className="card-title">Vendor Compliance</div>
+            </div>
+            <div className="card-body">
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:"var(--space-4)"}}>
+                <div style={{background:"#F9FAFB",borderRadius:"var(--radius-md)",padding:"var(--space-4)",textAlign:"center"}}>
+                  <div style={{fontSize:"var(--text-2xl)",fontWeight:800,color:"var(--color-accent)"}}>{reportData.vendor_compliance.avg_rate}%</div>
+                  <div style={{fontSize:"var(--text-xs)",color:"var(--text-secondary)"}}>Average Compliance Rate</div>
+                </div>
+                <div style={{background:"#FEE2E2",borderRadius:"var(--radius-md)",padding:"var(--space-4)",textAlign:"center"}}>
+                  <div style={{fontSize:"var(--text-2xl)",fontWeight:800,color:"#DC2626"}}>{reportData.vendor_compliance.below_70}</div>
+                  <div style={{fontSize:"var(--text-xs)",color:"var(--text-secondary)"}}>Vendors Below 70%</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </>
       )}
-      <style>{`
-        @media print {
-          .no-print, .page-header-actions, .app-sidebar, header { display: none !important; }
-          .page-header { margin-bottom: 0 !important; }
-          .card { box-shadow: none !important; border: 1px solid #ddd !important; break-inside: avoid; margin-bottom: 1rem !important; }
-          body, .app-shell, .app-main { background: white !important; margin: 0 !important; padding: 0 !important; }
-          .grid-2 { display: block !important; }
-        }
-      `}</style>
+
+      {!generated && !loading && (
+        <div style={{textAlign:"center",padding:"var(--space-12)",color:"var(--text-muted)"}}>
+          <BarChart2 size={48} style={{margin:"0 auto var(--space-4)",opacity:0.3}} />
+          <div style={{fontWeight:600,fontSize:"var(--text-lg)"}}>No Report Generated</div>
+          <div style={{fontSize:"var(--text-sm)"}}>Select filters and click Generate Report to view analytics</div>
+        </div>
+      )}
     </AppShell>
   );
 }
