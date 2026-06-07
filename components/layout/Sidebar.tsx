@@ -30,7 +30,8 @@ const adminNav: NavItem[] = [
 const vendorNav: NavItem[] = [
   { label: "My Profile", href: "/vendor/profile", icon: <Store size={18} /> },
   { label: "Market Map", href: "/map", icon: <Map size={18} /> },
-  { label: "Complaints", href: "/vendor/complaints", icon: <AlertCircle size={18} /> },
+  { label: "Documents", href: "/vendor/documents", icon: <FileText size={18} /> },
+  { label: "My Complaints", href: "/vendor/complaints", icon: <AlertCircle size={18} /> },
 ];
 
 interface SidebarProps {
@@ -81,15 +82,15 @@ export default function Sidebar({ role = "admin", collapsed, onToggle, mobileOpe
 
         <div className="sidebar-section-label" style={{ marginTop: "var(--space-4)", paddingLeft: "20px" }}>Public</div>
         <Link
-          href="/public"
-          className={`sidebar-link${pathname === "/public" ? " active" : ""}`}
+          href="/consumer"
+          className={`sidebar-link${pathname === "/consumer" ? " active" : ""}`}
           title={collapsed ? "Consumer View" : undefined}
           style={{
             margin: "2px 8px",
             borderRadius: "12px",
             padding: "10px 12px",
-            background: pathname === "/public" ? "rgba(255, 203, 5, 0.9)" : "transparent",
-            color: pathname === "/public" ? "#11296B" : "rgba(255, 255, 255, 0.7)",
+            background: pathname === "/consumer" ? "rgba(255, 203, 5, 0.9)" : "transparent",
+            color: pathname === "/consumer" ? "#11296B" : "rgba(255, 255, 255, 0.7)",
             transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
           }}
         >

@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  allowedDevOrigins: ['192.168.1.100'],
 
   // ── Root redirect: / → /login ──────────────────────────────────────────────
   // Handled at the router level so it works regardless of SSR/Turbopack quirks.

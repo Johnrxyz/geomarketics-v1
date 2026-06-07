@@ -412,6 +412,8 @@ export default function SanitationPage() {
           flex-direction: row;
           gap: 16px;
           align-items: flex-start;
+          width: 100%;
+          max-width: 100%;
         }
         .sc-left {
           flex: 1;
@@ -419,6 +421,7 @@ export default function SanitationPage() {
           display: flex;
           flex-direction: column;
           gap: 12px;
+          max-width: 100%;
         }
         .sc-right {
           width: 220px;
@@ -428,11 +431,14 @@ export default function SanitationPage() {
           gap: 12px;
         }
         .sc-table-wrap {
-          overflow: auto;
+          overflow-x: auto;
+          overflow-y: hidden;
           border: 1px solid #D1D5DB;
           border-radius: 6px;
           background: white;
           min-height: 300px;
+          -webkit-overflow-scrolling: touch;
+          width: 100%;
         }
         .sc-meta-bar {
           background: white;
@@ -465,8 +471,13 @@ export default function SanitationPage() {
           .sc-meta-field label { font-size: 11px !important; }
           .sc-meta-field input,
           .sc-meta-field select { font-size: 12px !important; }
-          .page-header { flex-direction: column; align-items: flex-start; gap: 8px; }
-          .page-header-actions { flex-wrap: wrap; }
+          .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+          .page-header-actions { flex-wrap: wrap; width: 100%; gap: 8px; }
+          .page-header-actions .btn { flex: 1; justify-content: center; min-width: 120px; }
+          
+          /* Ensure table behaves properly */
+          table th { padding: 8px 4px !important; font-size: 10px !important; }
+          table td { padding: 4px 2px !important; }
         }
       `}</style>
 

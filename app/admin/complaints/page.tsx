@@ -61,6 +61,7 @@ export default function ComplaintsPage() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [mobileView, setMobileView] = useState<"list" | "detail">("list");
 
   const fetchComplaints = useCallback(() => {
     setLoading(true);
@@ -191,26 +192,26 @@ export default function ComplaintsPage() {
       </div>
 
       {/* Summary row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "var(--space-4)", marginBottom: "var(--space-6)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "var(--space-4)", marginBottom: "var(--space-6)" }}>
         {[
           { label: "Open", value: open, color: "var(--color-error)", bg: "#FEE2E2", icon: <AlertCircle size={20} /> },
           { label: "Reviewing", value: reviewing, color: "var(--color-warning)", bg: "#FEF3C7", icon: <Clock size={20} /> },
           { label: "Resolved", value: resolved, color: "var(--color-success)", bg: "#DCFCE7", icon: <CheckCircle size={20} /> },
         ].map(({ label, value, color, bg, icon }) => (
           <div key={label} style={{
-            background: "white", borderRadius: "var(--radius-lg)", padding: "var(--space-5)",
-            boxShadow: "var(--shadow-md)", display: "flex", alignItems: "center", gap: "var(--space-4)"
+            background: "white", borderRadius: "var(--radius-lg)", padding: "var(--space-4)",
+            boxShadow: "var(--shadow-md)", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "var(--space-3)"
           }}>
-            <div style={{ width: 44, height: 44, borderRadius: "var(--radius-md)", background: bg, display: "flex", alignItems: "center", justifyContent: "center", color, flexShrink: 0 }}>{icon}</div>
-            <div>
+            <div style={{ width: 40, height: 40, borderRadius: "var(--radius-md)", background: bg, display: "flex", alignItems: "center", justifyContent: "center", color, flexShrink: 0 }}>{icon}</div>
+            <div style={{ width: "100%" }}>
               <div style={{ fontSize: "var(--text-2xl)", fontWeight: 800 }}>{summaryLoading ? "…" : value}</div>
-              <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>{label}</div>
+              <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)", overflowWrap: "break-word" }}>{label}</div>
             </div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: "flex", gap: "var(--space-5)" }}>
+      <div className="complaints-desktop-layout" style={{ gap: "var(--space-5)" }}>
         {/* Complaint List */}
         <div style={{ flex: "0 0 380px", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
           {/* Filters */}
@@ -240,7 +241,7 @@ export default function ComplaintsPage() {
             ) : filtered.map((c) => (
               <button
                 key={c.id}
-                onClick={() => setSelected(c)}
+                onClick={() => { setSelected(c); setMobileView("detail"); }}
                 style={{
                   width: "100%", padding: "var(--space-4)", textAlign: "left",
                   background: selected?.id === c.id ? "var(--bg-secondary)" : "white",
@@ -362,6 +363,162 @@ export default function ComplaintsPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* ── MOBILE layout ── */}
+      <div className="complaints-mobile-layout">
+        {mobileView === "list" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+            {/* Filters */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+              <div className="search-input-wrapper" style={{ maxWidth: "100%" }}>
+                <Search size={15} className="search-icon" />
+                <input type="search" className="search-input" placeholder="Search complaints..."
+                  value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search complaints" />
+              </div>
+              <select className="form-select" value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by status">
+                <option value="All">All Status</option>
+                <option value="open">Open</option>
+                <option value="reviewing">Reviewing</option>
+                <option value="resolved">Resolved</option>
+              </select>
+            </div>
+
+            {/* List */}
+            <div className="card">
+              {loading ? (
+                <div className="empty-state"><div className="empty-state-title">Loading...</div></div>
+              ) : error ? (
+                <div className="empty-state"><div className="empty-state-title" style={{ color: "var(--color-error)" }}>{error}</div></div>
+              ) : filtered.length === 0 ? (
+                <div className="empty-state"><div className="empty-state-title">No complaints found</div></div>
+              ) : filtered.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => { setSelected(c); setMobileView("detail"); }}
+                  style={{
+                    width: "100%", padding: "var(--space-4)", textAlign: "left",
+                    background: selected?.id === c.id ? "var(--bg-secondary)" : "white",
+                    borderBottom: "1px solid #F3F4F6", cursor: "pointer",
+                    display: "flex", flexDirection: "column", gap: "var(--space-2)",
+                    transition: "background var(--transition-fast)",
+                  }}
+                  aria-label={`View complaint ${c.id}`}
+                  aria-pressed={selected?.id === c.id}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-accent)" }}>
+                      {c.id}
+                    </span>
+                    <span className={`badge ${STATUS_COLORS[c.status]} badge-dot`} style={{ textTransform: "capitalize" }}>
+                      {c.status}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--text-primary)" }}>{c.vendor}</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {c.description}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                    <span><Store size={10} style={{ display: "inline", marginRight: 3 }} />Stall {c.stall}</span>
+                    <span><Calendar size={10} style={{ display: "inline", marginRight: 3 }} />{c.date}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div>
+            <button
+              onClick={() => setMobileView("list")}
+              className="btn btn-ghost btn-sm"
+              style={{ marginBottom: "var(--space-4)", display: "flex", alignItems: "center", gap: "var(--space-2)" }}
+            >
+              <ChevronRight size={16} style={{ transform: "rotate(180deg)" }} /> Back to list
+            </button>
+            
+            {/* Detailed view copy */}
+            {selected && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
+                {/* Header */}
+                <div className="card">
+                  <div className="card-header">
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+                        <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--color-accent)" }}>{selected.id}</span>
+                        <span className={`badge ${STATUS_COLORS[selected.status]} badge-dot`} style={{ textTransform: "capitalize" }}>{selected.status}</span>
+                      </div>
+                      <div style={{ fontSize: "var(--text-lg)", fontWeight: 700, marginTop: "var(--space-1)" }}>{selected.category}</div>
+                    </div>
+                  </div>
+                  <div className="card-body">
+                    {/* Info grid */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: "var(--space-4)", marginBottom: "var(--space-5)" }}>
+                      {[
+                        { label: "Stall", value: selected.stall },
+                        { label: "Vendor", value: selected.vendor },
+                        { label: "Section", value: selected.section },
+                        { label: "Date", value: selected.date },
+                        { label: "Reporter", value: selected.reporter },
+                        { label: "Category", value: selected.category },
+                      ].map(({ label, value }) => (
+                        <div key={label}>
+                          <div style={{ fontSize: "var(--text-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", marginBottom: 2 }}>{label}</div>
+                          <div style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>{value}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Description */}
+                    <div style={{
+                      padding: "var(--space-4)", background: "#F9FAFB",
+                      borderRadius: "var(--radius-md)", marginBottom: "var(--space-4)",
+                      borderLeft: "3px solid var(--color-primary)"
+                    }}>
+                      <div style={{ fontSize: "var(--text-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", marginBottom: "var(--space-2)" }}>Description</div>
+                      <p style={{ fontSize: "var(--text-sm)" }}>{selected.description}</p>
+                    </div>
+
+                    {/* Notes */}
+                    {selected.notes && (
+                      <div style={{ padding: "var(--space-3) var(--space-4)", background: "#DBEAFE", borderRadius: "var(--radius-sm)" }}>
+                        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 2 }}>Admin Notes</div>
+                        <p style={{ fontSize: "var(--text-sm)", color: "var(--color-info)" }}>{selected.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Update status */}
+                <div className="card">
+                  <div className="card-header"><div className="card-title">Update Status</div></div>
+                  <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="admin-notes-mobile">Admin Notes</label>
+                      <textarea id="admin-notes-mobile" className="form-textarea" rows={2}
+                        placeholder="Add notes about this complaint..."
+                        value={newNote} onChange={(e) => setNewNote(e.target.value)} />
+                    </div>
+                    <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap", flexDirection: "column" }}>
+                      <button className="btn btn-ghost" onClick={() => updateStatus(selected.id, "open")}
+                        disabled={selected.status === "open" || updating} style={{ justifyContent: "center" }}>
+                        <AlertCircle size={14} /> Mark Open
+                      </button>
+                      <button className="btn btn-secondary" onClick={() => updateStatus(selected.id, "reviewing")}
+                        disabled={selected.status === "reviewing" || updating} style={{ justifyContent: "center" }}>
+                        <Clock size={14} /> Mark Reviewing
+                      </button>
+                      <button className="btn btn-success" onClick={() => updateStatus(selected.id, "resolved")}
+                        disabled={selected.status === "resolved" || updating} style={{ justifyContent: "center" }}>
+                        <CheckCircle size={14} /> Mark Resolved
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* New Complaint Modal */}

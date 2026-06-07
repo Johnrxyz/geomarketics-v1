@@ -246,8 +246,65 @@ export const documentsApi = {
     return json(res);
   },
 
+  async requestResubmission(id: number | string, review_notes?: string) {
+    const res = await apiFetch(`/documents/${id}/request_resubmission/`, {
+      method: 'POST',
+      body: JSON.stringify({ review_notes }),
+    });
+    return json(res);
+  },
+
+  async upload(formData: FormData) {
+    // Note: When sending FormData, DO NOT set 'Content-Type' header.
+    // Fetch will automatically set it to 'multipart/form-data' with the correct boundary.
+    const res = await fetch(`${BASE_URL}/documents/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${getToken()}`
+      },
+      body: formData,
+    });
+    
+    if (res.status === 401) {
+      // Very basic refresh handling for upload endpoint
+      clearTokens();
+      window.location.href = '/login';
+    }
+    
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw err;
+    }
+    return res.json();
+  },
+
   async summary() {
     const res = await apiFetch('/documents/summary/');
+    return json(res);
+  },
+
+  async addPage(id: number | string, pageFile: File) {
+    const formData = new FormData();
+    formData.append('page', pageFile);
+    const res = await fetch(`${BASE_URL}/documents/${id}/add-page/`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${getToken()}` },
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw err;
+    }
+    return res.json();
+  },
+
+  async submitContract(id: number | string) {
+    const res = await apiFetch(`/documents/${id}/submit-contract/`, { method: 'POST' });
+    return json(res);
+  },
+
+  async getPages(id: number | string) {
+    const res = await apiFetch(`/documents/${id}/`);
     return json(res);
   },
 };
@@ -302,4 +359,53 @@ export const notificationsApi = {
     const res = await apiFetch('/notifications/mark-all-read/', { method: 'POST' });
     return json(res);
   },
+};
+
+// ─── Markets API ─────────────────────────────────────────────────────────────
+
+export const marketsApi = {
+  async list(params: Record<string, string> = {}) {
+    const qs = new URLSearchParams(params).toString();
+    const res = await apiFetch(`/markets/${qs ? '?' + qs : ''}`, {}, false);
+    return json(res);
+  },
+  
+  async get(id: number | string) {
+    const res = await apiFetch(`/markets/${id}/`, {}, false);
+    return json(res);
+  },
+};
+
+// ─── Prices API ──────────────────────────────────────────────────────────────
+
+export const pricesApi = {
+  async snapshots(params: Record<string, string> = {}) {
+    const qs = new URLSearchParams(params).toString();
+    const res = await apiFetch(`/prices/snapshots/${qs ? '?' + qs : ''}`, {}, false);
+    return json(res);
+  },
+
+  async commodities(params: Record<string, string> = {}) {
+    const qs = new URLSearchParams(params).toString();
+    const res = await apiFetch(`/prices/commodities/${qs ? '?' + qs : ''}`, {}, false);
+    return json(res);
+  },
+};
+
+// ─── Unknown Entities API ───────────────────────────────────────────────────
+
+export const unknownEntitiesApi = {
+  async list(params: Record<string, string> = {}) {
+    const qs = new URLSearchParams(params).toString();
+    const res = await apiFetch(`/unknown-entities/${qs ? '?' + qs : ''}`);
+    return json(res);
+  },
+
+  async resolve(id: number | string, data: Record<string, any>) {
+    const res = await apiFetch(`/unknown-entities/${id}/resolve/`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+    return json(res);
+  }
 };

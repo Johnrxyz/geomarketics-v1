@@ -1239,6 +1239,15 @@ h1, h2, h3, h4, h5, h6 {
   position: relative;
 }
 
+/* ---------- Complaints Layout (responsive master-detail) ---------- */
+.complaints-desktop-layout { display: flex; }   /* visible on desktop */
+.complaints-mobile-layout  { display: none; }   /* hidden on desktop */
+
+/* ---------- Map Layout (responsive panel vs bottom drawer) ---------- */
+.map-desktop-panel  { display: flex !important; }  /* right panel: visible on desktop */
+.map-mobile-search  { display: none !important; }  /* floating search: hidden on desktop */
+.map-mobile-drawer  { display: none !important; }  /* bottom drawer: hidden on desktop */
+
 /* ---------- Responsive ---------- */
 @media (max-width: 1200px) {
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
@@ -1246,25 +1255,57 @@ h1, h2, h3, h4, h5, h6 {
 
 @media (max-width: 768px) {
   :root {
-    --sidebar-width: 240px;
+    --sidebar-width: 280px;
   }
 
+  /* Content fills full viewport on mobile */
   .app-content {
     margin-left: 0 !important;
   }
 
+  /* Header stretches edge-to-edge */
   .app-header {
     left: 0 !important;
+    padding: 0 var(--space-4);
   }
 
+  /* Floating-sidebar (map) header: restore visible background on mobile
+     and reset the margin-left that pushes the title off-screen */
+  .app-content.floating-sidebar .app-header {
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important;
+    pointer-events: auto !important;
+  }
+
+  .app-content.floating-sidebar .header-left {
+    margin-left: 0 !important;
+  }
+
+  /* Sidebar: pin to viewport edges (not inset), slide fully off-screen */
   .sidebar {
-    transform: translateX(-100%);
+    top: 0;
+    left: 0;
+    height: 100vh;
+    border-radius: 0;
+    transform: translateX(calc(-100% - 20px)); /* extra 20px ensures shadow doesn't peek */
     transition: transform var(--transition-base);
     z-index: var(--z-sidebar);
+    box-shadow: none;
   }
 
+  /* When opened via hamburger, slide in from left */
   .sidebar.mobile-open {
     transform: translateX(0);
+    box-shadow: 4px 0 30px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Collapsed sidebar still slides off fully on mobile */
+  .sidebar.collapsed {
+    transform: translateX(calc(-100% - 20px));
+    width: var(--sidebar-width); /* keep width so open animation looks right */
   }
 
   .page-main {
@@ -1279,6 +1320,20 @@ h1, h2, h3, h4, h5, h6 {
     flex-direction: column;
     align-items: flex-start;
   }
+
+  /* Hide the user-info text on small screens to save header space */
+  .user-info {
+    display: none;
+  }
+
+  /* Complaints: show mobile layout, hide desktop */
+  .complaints-desktop-layout { display: none !important; }
+  .complaints-mobile-layout  { display: block; }
+
+  /* Map: show mobile UI, hide desktop panel */
+  .map-desktop-panel  { display: none !important; }
+  .map-mobile-search  { display: block !important; }
+  .map-mobile-drawer  { display: flex !important; }
 }
 
 /* ---------- Print ---------- */
