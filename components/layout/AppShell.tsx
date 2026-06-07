@@ -4,7 +4,7 @@ import { useState } from "react";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 
-type Role = "admin" | "vendor";
+type Role = "admin" | "vendor" | "customer";
 
 interface AppShellProps {
   children: React.ReactNode;

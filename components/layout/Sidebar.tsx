@@ -9,7 +9,7 @@ import {
   ChevronLeft, ChevronRight, LogOut, ClipboardCheck
 } from "lucide-react";
 
-type Role = "admin" | "vendor";
+type Role = "admin" | "vendor" | "customer";
 
 interface NavItem {
   label: string;
@@ -34,6 +34,10 @@ const vendorNav: NavItem[] = [
   { label: "My Complaints", href: "/vendor/complaints", icon: <AlertCircle size={18} /> },
 ];
 
+const customerNav: NavItem[] = [
+  { label: "My Complaints", href: "/consumer/complaints", icon: <AlertCircle size={18} /> },
+];
+
 interface SidebarProps {
   role?: Role;
   collapsed: boolean;
@@ -43,7 +47,7 @@ interface SidebarProps {
 
 export default function Sidebar({ role = "admin", collapsed, onToggle, mobileOpen }: SidebarProps) {
   const pathname = usePathname();
-  const navItems = role === "admin" ? adminNav : vendorNav;
+  const navItems = role === "admin" ? adminNav : role === "vendor" ? vendorNav : customerNav;
 
   return (
     <aside className={`sidebar${collapsed ? " collapsed" : ""}${mobileOpen ? " mobile-open" : ""}`} aria-label="Main navigation">

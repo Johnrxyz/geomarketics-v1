@@ -17,12 +17,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getToken, getUser } from "./api";
 
-type Role = "admin" | "vendor";
+type Role = "admin" | "vendor" | "customer";
 
 /** Where each role lands when they try to access a page they can't. */
 const ROLE_HOME: Record<Role, string> = {
   admin: "/dashboard",
   vendor: "/vendor/profile",
+  customer: "/consumer",
 };
 
 interface AuthGuardResult {
