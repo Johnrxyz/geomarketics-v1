@@ -122,7 +122,7 @@ export default function MapPage() {
   // Map padding changes based on viewport
   const mapPadding = isMobile
     ? { top: 72, right: 16, bottom: drawerOpen ? 300 : 72, left: 16 }
-    : { top: 20, right: 340, bottom: 20, left: 0 };
+    : { top: 80, right: 340, bottom: 20, left: 280 };
 
   /* ── Shared stall list item ── */
   const StallItem = ({ stall }: { stall: MarketStall }) => {

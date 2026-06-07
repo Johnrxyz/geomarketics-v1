@@ -8,6 +8,7 @@ import {
   ChefHat, Utensils, CheckCircle, ArrowDown, ArrowUp
 } from "lucide-react";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceDot } from "recharts";
+import { complaintsApi, stallsApi } from "@/lib/api";
 import { RECIPES, Recipe } from "../../data/recipes";
 
 // --- MOCK DATA STRATEGY (FALLBACK FOR THESIS DEMO) ---
@@ -44,6 +45,11 @@ const MARKETS = [
 ];
 
 export default function LucenaDecisionSupport() {
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   // --- MOCK DATA STRATEGY (FALLBACK FOR THESIS DEMO) ---
   const [staples, setStaples] = useState<any[]>(STAPLES);
   const [marketsData, setMarketsData] = useState<any[]>(MARKETS);
@@ -72,7 +78,57 @@ export default function LucenaDecisionSupport() {
 
   // State for Complaint Modal
   const [isComplaintModalOpen, setIsComplaintModalOpen] = useState(false);
+  const [stallsList, setStallsList] = useState<any[]>([]);
   const [complaintSubmitted, setComplaintSubmitted] = useState(false);
+  const [isSubmittingComplaint, setIsSubmittingComplaint] = useState(false);
+  const [complaintForm, setComplaintForm] = useState<{
+    stall: string;
+    category: string;
+    email: string;
+    description: string;
+    file: File | null;
+  }>({
+    stall: "", category: "sanitation", email: "", description: "", file: null
+  });
+
+  useEffect(() => {
+    if (isComplaintModalOpen && stallsList.length === 0) {
+      stallsApi.list().then((res: any) => setStallsList(res.results || res)).catch(console.error);
+    }
+  }, [isComplaintModalOpen]);
+
+  const handleComplaintSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!complaintForm.email || !complaintForm.description) return;
+    
+    setIsSubmittingComplaint(true);
+    try {
+      const formData = new FormData();
+      if (complaintForm.stall) {
+        const found = stallsList.find(s => s.stall_number.toLowerCase() === complaintForm.stall.toLowerCase());
+        if (found) {
+          formData.append('stall', found.id.toString());
+        } else {
+          formData.append('description', `[Reported Stall: ${complaintForm.stall}]\n\n${complaintForm.description}`);
+        }
+      }
+      formData.append('category', complaintForm.category);
+      formData.append('description', complaintForm.description);
+      formData.append('complainant_contact', complaintForm.email);
+      formData.append('subject', `Public Complaint regarding ${complaintForm.category}`);
+      if (complaintForm.file) {
+        formData.append('evidence_file', complaintForm.file);
+      }
+
+      await complaintsApi.createWithFile(formData);
+      setComplaintSubmitted(true);
+      setComplaintForm({ stall: "", category: "sanitation", email: "", description: "", file: null });
+    } catch (err: any) {
+      alert(err?.detail || err?.message || "Failed to submit complaint. Please try again.");
+    } finally {
+      setIsSubmittingComplaint(false);
+    }
+  };
 
   // State for Historical Explorer
   const [activeCommodity, setActiveCommodity] = useState(STAPLES[1]); // Default Tomato
@@ -526,12 +582,14 @@ export default function LucenaDecisionSupport() {
                 </div>
 
                 <div style={{ height: 40, width: "100%", marginTop: "auto" }}>
+                  {isMounted ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={item.sparkline.map((v: number, i: number) => ({ val: v, idx: i }))}>
                       <Line type="monotone" dataKey="val" stroke={item.status === 'above' ? '#DC2626' : item.status === 'below' ? '#16A34A' : '#EAB308'} strokeWidth={2} dot={false} isAnimationActive={false} />
                       <YAxis domain={['dataMin - 5', 'dataMax + 5']} hide />
                     </LineChart>
                   </ResponsiveContainer>
+                  ) : <div style={{ height: "100%", width: "100%" }} />}
                 </div>
               </div>
                   ))}
@@ -770,6 +828,7 @@ export default function LucenaDecisionSupport() {
 
                 {/* Interactive Area Chart */}
                 <div style={{ height: 250, width: "100%", marginBottom: "var(--space-4)" }}>
+                  {isMounted ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={activeCommodity.id === 'tomato' ? HISTORICAL_DATA : HISTORICAL_DATA.map(d => ({ ...d, price: d.price * (activeCommodity.price/88) }))} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <defs>
@@ -786,6 +845,7 @@ export default function LucenaDecisionSupport() {
                       {activeCommodity.id === 'tomato' && <ReferenceDot x="May 29" y={95} r={5} fill="#DC2626" stroke="white" strokeWidth={2} />}
                     </AreaChart>
                   </ResponsiveContainer>
+                  ) : <div style={{ height: "100%", width: "100%" }} />}
                 </div>
 
                 {/* Annotations & WOW Forecast */}
@@ -919,42 +979,60 @@ export default function LucenaDecisionSupport() {
                   <button className="btn btn-primary" style={{ width: "100%" }} onClick={() => { setIsComplaintModalOpen(false); setComplaintSubmitted(false); }}>Close</button>
                 </div>
               ) : (
-                <form onSubmit={(e) => { e.preventDefault(); setComplaintSubmitted(true); }} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <form onSubmit={handleComplaintSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                   <div>
                     <label style={{ display: "block", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "6px" }}>Stall Number (if known)</label>
-                    <input type="text" placeholder="e.g. B-12" style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #D1D5DB" }} />
+                    <input type="text" list="stalls-list" placeholder="Search stall or vendor (e.g. B-12)" style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #D1D5DB" }}
+                      value={complaintForm.stall} onChange={e => setComplaintForm({...complaintForm, stall: e.target.value})} />
+                    <datalist id="stalls-list">
+                      {stallsList.map(s => (
+                        <option key={s.id} value={s.stall_number}>{s.vendor_name ? s.vendor_name : 'Vacant'}</option>
+                      ))}
+                    </datalist>
                   </div>
 
                   <div>
                     <label style={{ display: "block", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "6px" }}>Issue Category</label>
-                    <select className="form-select" style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #D1D5DB", appearance: "auto" }}>
-                      <option>Sanitation</option>
-                      <option>Overpricing</option>
-                      <option>Incorrect Weights</option>
-                      <option>Other</option>
+                    <select className="form-select" style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #D1D5DB", appearance: "auto" }}
+                      value={complaintForm.category} onChange={e => setComplaintForm({...complaintForm, category: e.target.value})}>
+                      <option value="sanitation">Sanitation</option>
+                      <option value="overpricing">Overpricing</option>
+                      <option value="safety">Safety Hazard</option>
+                      <option value="food_safety">Food Safety</option>
+                      <option value="permit">Permit Violation</option>
+                      <option value="display">Display Violation</option>
+                      <option value="noise">Noise/Disturbance</option>
+                      <option value="other">Other</option>
                     </select>
                   </div>
 
                   <div>
                     <label style={{ display: "block", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "6px" }}>Your Email <span style={{color: "#DC2626"}}>*</span></label>
-                    <input type="email" required placeholder="For updates regarding your complaint..." style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #D1D5DB" }} />
+                    <input type="email" required placeholder="For updates regarding your complaint..." style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #D1D5DB" }}
+                      value={complaintForm.email} onChange={e => setComplaintForm({...complaintForm, email: e.target.value})} />
                   </div>
 
                   <div>
                     <label style={{ display: "block", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "6px" }}>Describe the Issue <span style={{color: "#DC2626"}}>*</span></label>
-                    <textarea rows={4} required placeholder="What did you observe? Be as specific as possible..." style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #D1D5DB", resize: "vertical" }} />
+                    <textarea rows={4} required placeholder="What did you observe? Be as specific as possible..." style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #D1D5DB", resize: "vertical" }}
+                      value={complaintForm.description} onChange={e => setComplaintForm({...complaintForm, description: e.target.value})} />
                   </div>
 
                   <div>
                     <label style={{ display: "block", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "6px" }}>Upload Image (Optional)</label>
-                    <input type="file" accept="image/*" style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #D1D5DB", fontSize: "14px", background: "white" }} />
+                    <input type="file" accept="image/*" style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #D1D5DB", fontSize: "14px", background: "white" }}
+                      onChange={e => {
+                        if (e.target.files && e.target.files[0]) {
+                          setComplaintForm({...complaintForm, file: e.target.files[0]});
+                        }
+                      }} />
                     <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "6px" }}>Attach a photo to help us better understand the issue.</div>
                   </div>
                   
                   <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end", marginTop: "16px" }}>
                     <button type="button" onClick={() => setIsComplaintModalOpen(false)} style={{ padding: "10px 20px", background: "white", border: "1px solid #D1D5DB", borderRadius: "6px", fontWeight: 600, color: "var(--text-primary)", cursor: "pointer" }}>Cancel</button>
-                    <button type="submit" style={{ padding: "10px 20px", background: "#F28C8C", border: "none", borderRadius: "6px", fontWeight: 700, color: "white", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px" }}>
-                      <Send size={16} /> Submit Report
+                    <button type="submit" disabled={isSubmittingComplaint} style={{ padding: "10px 20px", background: "#F28C8C", border: "none", borderRadius: "6px", fontWeight: 700, color: "white", cursor: isSubmittingComplaint ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <Send size={16} /> {isSubmittingComplaint ? "Submitting..." : "Submit Report"}
                     </button>
                   </div>
                 </form>

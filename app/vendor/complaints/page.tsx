@@ -18,6 +18,7 @@ interface Complaint {
   date: string;
   stall: string;
   notes?: string;
+  evidence_file?: string;
 }
 
 const STATUS_META: Record<string, { label: string; badge: string; icon: React.ReactNode }> = {
@@ -63,7 +64,8 @@ export default function VendorComplaintsPage() {
             status: (c.status ?? "open").toLowerCase() as Complaint["status"],
             date: formatDate(c.created_at ?? c.date ?? ""),
             stall: c.stall_number ?? c.stall ?? "—",
-            notes: c.admin_notes ?? c.notes ?? "",
+            notes: c.resolution_notes ?? c.notes ?? "",
+            evidence_file: c.evidence_file,
           }))
         );
       })
@@ -133,7 +135,14 @@ export default function VendorComplaintsPage() {
             <div style={{ fontSize: "var(--text-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", marginBottom: "var(--space-2)" }}>
               Complaint Details
             </div>
-            <p style={{ fontSize: "var(--text-sm)" }}>{c.description}</p>
+            <p style={{ fontSize: "var(--text-sm)", whiteSpace: "pre-wrap" }}>{c.description}</p>
+            {c.evidence_file && (
+              <div style={{ marginTop: "var(--space-3)" }}>
+                <a href={c.evidence_file} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm" style={{ display: "inline-flex", gap: "var(--space-2)" }}>
+                  <FileText size={14} /> View Evidence File
+                </a>
+              </div>
+            )}
           </div>
 
           {/* Admin response */}

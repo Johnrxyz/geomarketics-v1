@@ -169,7 +169,7 @@ export const vendorsApi = {
 export const stallsApi = {
   async list(params: Record<string, string> = {}) {
     const qs = new URLSearchParams(params).toString();
-    const res = await apiFetch(`/stalls/${qs ? '?' + qs : ''}`);
+    const res = await apiFetch(`/stalls/${qs ? '?' + qs : ''}`, {}, !!getToken());
     return json(res);
   },
 
@@ -207,10 +207,33 @@ export const complaintsApi = {
     return json(res);
   },
 
-  async updateStatus(id: number | string, status: string, admin_notes?: string) {
+  async createWithFile(formData: FormData) {
+    const token = getToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(`${BASE_URL}/complaints/`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (res.status === 401 && token) {
+      clearTokens();
+      window.location.href = '/login';
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw err;
+    }
+    return res.json();
+  },
+
+  async updateStatus(id: number | string, status: string, resolution_notes?: string) {
     const res = await apiFetch(`/complaints/${id}/update-status/`, {
       method: 'PATCH',
-      body: JSON.stringify({ status, admin_notes }),
+      body: JSON.stringify({ status, resolution_notes }),
     });
     return json(res);
   },

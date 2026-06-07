@@ -21,6 +21,7 @@ interface Complaint {
   date: string;
   reporter: string;
   notes?: string;
+  evidence_file?: string;
 }
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
@@ -79,7 +80,8 @@ export default function ComplaintsPage() {
           status: (c.status ?? "open").toLowerCase() as Complaint["status"],
           date: formatDate(c.created_at ?? c.date ?? ""),
           reporter: c.reporter_name ?? c.reporter ?? "Anonymous",
-          notes: c.admin_notes ?? c.notes ?? "",
+          notes: c.resolution_notes ?? c.notes ?? "",
+          evidence_file: c.evidence_file,
         }));
         setComplaints(mapped);
       })
@@ -321,13 +323,21 @@ export default function ComplaintsPage() {
                     borderLeft: "3px solid var(--color-primary)"
                   }}>
                     <div style={{ fontSize: "var(--text-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", marginBottom: "var(--space-2)" }}>Description</div>
-                    <p style={{ fontSize: "var(--text-sm)" }}>{selected.description}</p>
+                    <p style={{ fontSize: "var(--text-sm)", whiteSpace: "pre-wrap" }}>{selected.description}</p>
+                    
+                    {selected.evidence_file && (
+                      <div style={{ marginTop: "var(--space-3)" }}>
+                        <a href={selected.evidence_file} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm" style={{ display: "inline-flex", gap: "var(--space-2)" }}>
+                          <AlertCircle size={14} /> View Evidence File
+                        </a>
+                      </div>
+                    )}
                   </div>
 
                   {/* Notes */}
                   {selected.notes && (
                     <div style={{ padding: "var(--space-3) var(--space-4)", background: "#DBEAFE", borderRadius: "var(--radius-sm)" }}>
-                      <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 2 }}>Admin Notes</div>
+                      <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 2 }}>Resolution Notes</div>
                       <p style={{ fontSize: "var(--text-sm)", color: "var(--color-info)" }}>{selected.notes}</p>
                     </div>
                   )}
@@ -339,9 +349,9 @@ export default function ComplaintsPage() {
                 <div className="card-header"><div className="card-title">Update Status</div></div>
                 <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
                   <div className="form-group">
-                    <label className="form-label" htmlFor="admin-notes">Admin Notes</label>
+                    <label className="form-label" htmlFor="admin-notes">Resolution Notes</label>
                     <textarea id="admin-notes" className="form-textarea" rows={2}
-                      placeholder="Add notes about this complaint..."
+                      placeholder="Add notes about the resolution..."
                       value={newNote} onChange={(e) => setNewNote(e.target.value)} />
                   </div>
                   <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap" }}>
@@ -476,13 +486,21 @@ export default function ComplaintsPage() {
                       borderLeft: "3px solid var(--color-primary)"
                     }}>
                       <div style={{ fontSize: "var(--text-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", marginBottom: "var(--space-2)" }}>Description</div>
-                      <p style={{ fontSize: "var(--text-sm)" }}>{selected.description}</p>
+                      <p style={{ fontSize: "var(--text-sm)", whiteSpace: "pre-wrap" }}>{selected.description}</p>
+                      
+                      {selected.evidence_file && (
+                        <div style={{ marginTop: "var(--space-3)" }}>
+                          <a href={selected.evidence_file} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm" style={{ display: "inline-flex", gap: "var(--space-2)" }}>
+                            <AlertCircle size={14} /> View Evidence File
+                          </a>
+                        </div>
+                      )}
                     </div>
 
                     {/* Notes */}
                     {selected.notes && (
                       <div style={{ padding: "var(--space-3) var(--space-4)", background: "#DBEAFE", borderRadius: "var(--radius-sm)" }}>
-                        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 2 }}>Admin Notes</div>
+                        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 2 }}>Resolution Notes</div>
                         <p style={{ fontSize: "var(--text-sm)", color: "var(--color-info)" }}>{selected.notes}</p>
                       </div>
                     )}
@@ -494,9 +512,9 @@ export default function ComplaintsPage() {
                   <div className="card-header"><div className="card-title">Update Status</div></div>
                   <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
                     <div className="form-group">
-                      <label className="form-label" htmlFor="admin-notes-mobile">Admin Notes</label>
+                      <label className="form-label" htmlFor="admin-notes-mobile">Resolution Notes</label>
                       <textarea id="admin-notes-mobile" className="form-textarea" rows={2}
-                        placeholder="Add notes about this complaint..."
+                        placeholder="Add notes about the resolution..."
                         value={newNote} onChange={(e) => setNewNote(e.target.value)} />
                     </div>
                     <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap", flexDirection: "column" }}>
