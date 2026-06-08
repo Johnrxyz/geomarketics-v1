@@ -18,6 +18,7 @@ export interface MarketStall {
   status: StallStatus;
   x: number;
   y: number;
+  streetViewImages?: string[];
 }
 
 export const STATUS_MAP: Record<StallStatus, { label: string; color: string; border: string; text: string }> = {
@@ -35,13 +36,17 @@ const SVG_HEIGHT = 5100;
 interface MarketMapProps {
   stalls: MarketStall[];
   selectedStallId?: string | null;
+  highlightedStallIds?: string[];
+  navigationRoute?: { points: {x: number, y: number, label: string}[], totalDistanceMeters: number } | null;
   onStallSelect?: (stall: MarketStall | null) => void;
+  onGetDirections?: (stall: MarketStall) => void;
+  onViewDetails?: (stall: MarketStall) => void;
   showAdminLinks?: boolean;
   padding?: { top: number; right: number; bottom: number; left: number };
   focusTrigger?: number;
 }
 
-export default function MarketMap({ stalls, selectedStallId, onStallSelect, showAdminLinks = false, padding, focusTrigger }: MarketMapProps) {
+export default function MarketMap({ stalls, selectedStallId, highlightedStallIds = [], navigationRoute, onStallSelect, onGetDirections, onViewDetails, showAdminLinks = false, padding, focusTrigger }: MarketMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<MarketStall | null>(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 0.15 });
@@ -182,7 +187,8 @@ export default function MarketMap({ stalls, selectedStallId, onStallSelect, show
     
     setTimeout(() => {
       setTransform(prev => {
-        const targetScale = Math.max(prev.scale, 1.5);
+        // Reduced from 1.5 to 0.6 to provide more context around the selected stall
+        const targetScale = Math.max(prev.scale, 0.6);
         const newX = cx - (stall.x * targetScale);
         const newY = cy - (stall.y * targetScale);
         return { x: newX, y: newY, scale: targetScale };
@@ -239,7 +245,7 @@ export default function MarketMap({ stalls, selectedStallId, onStallSelect, show
         width: "100%", height: "100%", borderRadius: "var(--radius-lg)", overflow: "hidden",
         boxShadow: "var(--shadow-lg)", position: "relative", minHeight: "400px",
         background: "#F3F4F6", cursor: isDragging.current ? "grabbing" : "grab",
-        touchAction: "none"
+        touchAction: "none", zIndex: 1
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -258,6 +264,9 @@ export default function MarketMap({ stalls, selectedStallId, onStallSelect, show
         {stalls.map(stall => {
           const conf = STATUS_MAP[stall.status];
           const isSelected = selected?.id === stall.id;
+          const isHighlighted = highlightedStallIds.length > 0 && highlightedStallIds.includes(stall.id);
+          const opacity = highlightedStallIds.length > 0 && !isHighlighted && !isSelected ? 0.4 : 1;
+          
           return (
             <button key={stall.id} 
               onClick={(e) => { 
@@ -268,27 +277,78 @@ export default function MarketMap({ stalls, selectedStallId, onStallSelect, show
               onPointerDown={(e) => e.stopPropagation()}
               style={{
                 position: "absolute", left: stall.x, top: stall.y,
-                transform: `translate(-50%, -50%) scale(${isSelected ? 1.5 : 1})`,
-                width: 140, height: 80, background: conf.color, border: `8px solid ${conf.border}`, borderRadius: 16,
+                transform: `translate(-50%, -50%) scale(${isSelected ? 1.5 : isHighlighted ? 1.2 : 1})`,
+                width: 140, height: 80, background: conf.color, border: `8px solid ${isHighlighted ? '#EF4444' : conf.border}`, borderRadius: 16,
                 display: "flex", alignItems: "center", justifyContent: "center", color: conf.text, fontSize: "28px", fontWeight: "bold",
-                cursor: "pointer", boxShadow: isSelected ? "0 40px 60px rgba(0,0,0,0.5)" : "0 20px 40px rgba(0,0,0,0.3)",
-                transition: "transform 0.2s, box-shadow 0.2s", zIndex: isSelected ? 10 : 1
+                cursor: "pointer", boxShadow: isSelected || isHighlighted ? "0 40px 60px rgba(0,0,0,0.5)" : "0 20px 40px rgba(0,0,0,0.3)",
+                transition: "all 0.2s", zIndex: isSelected ? 10 : isHighlighted ? 5 : 1, opacity
               }}
-              onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as any).style.transform = "translate(-50%, -50%) scale(1.15)"; }}
-              onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as any).style.transform = "translate(-50%, -50%) scale(1)"; }}
+              onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as any).style.transform = `translate(-50%, -50%) scale(${isHighlighted ? 1.3 : 1.15})`; }}
+              onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as any).style.transform = `translate(-50%, -50%) scale(${isHighlighted ? 1.2 : 1})`; }}
               title={`Stall ${stall.number} - ${conf.label}`}
             >
               {stall.number}
             </button>
           );
         })}
+
+        {/* Entrance Marker */}
+        <div style={{
+          position: "absolute", left: SVG_WIDTH / 2, top: SVG_HEIGHT - 200,
+          transform: "translate(-50%, -50%)",
+          background: "#1F2937", color: "white", padding: "12px 24px", borderRadius: "100px",
+          fontSize: "32px", fontWeight: 800, border: "6px solid white", boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
+          zIndex: 2, pointerEvents: "none"
+        }}>
+          MARKET ENTRANCE
+        </div>
+
+        {/* Route Overlay */}
+        {navigationRoute && navigationRoute.points.length > 1 && (
+          <svg style={{ position: "absolute", top: 0, left: 0, width: SVG_WIDTH, height: SVG_HEIGHT, pointerEvents: "none", zIndex: 3 }}>
+            <defs>
+              <filter id="glow">
+                <feGaussianBlur stdDeviation="15" result="coloredBlur"/>
+                <feMerge>
+                  <feMergeNode in="coloredBlur"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+            </defs>
+            <polyline 
+              points={navigationRoute.points.map(p => `${p.x},${p.y}`).join(" ")}
+              fill="none" 
+              stroke="#3B82F6" 
+              strokeWidth="24" 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeDasharray="40 40"
+              filter="url(#glow)"
+              style={{ animation: "dash 1s linear infinite" }}
+            />
+            {navigationRoute.points.map((p, i) => (
+              <circle key={i} cx={p.x} cy={p.y} r="30" fill={i === 0 ? "#10B981" : "#EF4444"} stroke="white" strokeWidth="8" />
+            ))}
+            <style>{`
+              @keyframes dash {
+                to { stroke-dashoffset: -80; }
+              }
+            `}</style>
+          </svg>
+        )}
       </div>
 
-      {selected && (
+      {selected && (() => {
+        // Calculate a scale factor based on the map's current scale. 
+        // Base scale is 0.15. We restrict it so it doesn't get microscopically small or excessively huge.
+        const popupScale = Math.max(0.6, Math.min(1.2, transform.scale / 0.15));
+        
+        return (
         <div style={{
           position: "absolute", left: transform.x + selected.x * transform.scale,
           top: transform.y + selected.y * transform.scale - (40 * transform.scale) - 15,
-          transform: "translate(-50%, -100%)", background: "white", borderRadius: "12px", padding: "16px",
+          transform: `translate(-50%, -100%) scale(${popupScale})`, transformOrigin: "bottom center",
+          background: "white", borderRadius: "12px", padding: "16px",
           boxShadow: "0 10px 25px rgba(0,0,0,0.15)", display: "flex", flexDirection: "column", gap: "10px", width: "260px", zIndex: 1000,
           border: `2px solid ${STATUS_MAP[selected.status].border}`, animation: "popIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)", cursor: "default"
         }} role="region" aria-label="Selected stall details" onPointerDown={(e) => e.stopPropagation()}>
@@ -306,13 +366,23 @@ export default function MarketMap({ stalls, selectedStallId, onStallSelect, show
           <div style={{ position: "relative", zIndex: 1, marginTop: "2px" }}>
             <span className="badge" style={{ background: STATUS_MAP[selected.status].color, color: STATUS_MAP[selected.status].text, border: `1px solid ${STATUS_MAP[selected.status].border}`, padding: "2px 8px", borderRadius: "100px", fontSize: "11px", display: "inline-block" }}>{STATUS_MAP[selected.status].label}</span>
           </div>
-          {showAdminLinks && (
+          {showAdminLinks ? (
             <div style={{ display: "flex", position: "relative", zIndex: 1, marginTop: "4px" }}>
               <Link href={`/map/stall/${selected.id}`} className="btn btn-primary" style={{ flex: 1, padding: "8px", fontSize: "13px", justifyContent: "center" }}>View More Info</Link>
             </div>
+          ) : (
+            <div style={{ display: "flex", gap: "8px", position: "relative", zIndex: 1, marginTop: "4px" }}>
+              {onViewDetails && (
+                <button className="btn btn-ghost" onClick={() => onViewDetails(selected)} style={{ flex: 1, padding: "8px", fontSize: "12px", background: "#F3F4F6" }}>View Details</button>
+              )}
+              {onGetDirections && (
+                <button className="btn btn-primary" onClick={() => onGetDirections(selected)} style={{ flex: 1, padding: "8px", fontSize: "12px", justifyContent: "center" }}>Get Directions</button>
+              )}
+            </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Zoom Controls */}
       <div style={{

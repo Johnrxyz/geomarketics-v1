@@ -5,10 +5,11 @@ import Link from "next/link";
 import {
   TrendingUp, TrendingDown, Minus, Activity, ShoppingBag, MapPin, Search, 
   AlertCircle, Info, ChevronRight, ChevronLeft, BarChart2, Star, Calculator, Bookmark, Bell, X, Send,
-  ChefHat, Utensils, CheckCircle, ArrowDown, ArrowUp
+  ChefHat, Utensils, CheckCircle, ArrowDown, ArrowUp, Map
 } from "lucide-react";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceDot } from "recharts";
 import { complaintsApi, stallsApi } from "@/lib/api";
+import MarketMap, { MarketStall, STATUS_MAP } from "@/components/map/MarketMap";
 import { RECIPES, Recipe } from "../../data/recipes";
 
 // --- MOCK DATA STRATEGY (FALLBACK FOR THESIS DEMO) ---
@@ -91,11 +92,79 @@ export default function LucenaDecisionSupport() {
     stall: "", category: "sanitation", email: "", description: "", file: null
   });
 
+  // State for Market Navigator
+  const [mapStalls, setMapStalls] = useState<MarketStall[]>([]);
+  const [mapSearch, setMapSearch] = useState("");
+  const [selectedMapStallId, setSelectedMapStallId] = useState<string | null>(null);
+  const [highlightedMapStallIds, setHighlightedMapStallIds] = useState<string[]>([]);
+  const [navigationRoute, setNavigationRoute] = useState<{ points: {x: number, y: number, label: string}[], totalDistanceMeters: number } | null>(null);
+  const [isMobilePanelExpanded, setIsMobilePanelExpanded] = useState(false);
+
   useEffect(() => {
-    if (isComplaintModalOpen && stallsList.length === 0) {
-      stallsApi.list().then((res: any) => setStallsList(res.results || res)).catch(console.error);
+    async function loadStalls() {
+      try {
+        const data = await stallsApi.list({ page_size: "100" }) as any;
+        const items = data.results || data;
+        setStallsList(items);
+
+        const STALL_W = 200;
+        const STALL_H = 120;
+        const COLS    = 12;
+        const SEC_PAD = 400;
+
+        const sectionIndex: Record<string, number> = {};
+        const sectionCounter: Record<string, number> = {};
+        let secOrder = 0;
+
+        const STATUS_REMAP: Record<string, string> = {
+          occupied: "owner", vacant: "vacant", reserved: "storage", flagged: "rented",
+          closed: "closed", storage: "storage", ambulant: "ambulant",
+        };
+
+        items.forEach((s: any) => {
+          const sec = String(s.section_code ?? "?");
+          if (!(sec in sectionIndex)) {
+            sectionIndex[sec] = secOrder++;
+            sectionCounter[sec] = 0;
+          }
+        });
+
+        const mapped: MarketStall[] = items.map((s: any) => {
+          const rawX = s.map_x as number | null;
+          const rawY = s.map_y as number | null;
+          const hasCoords = rawX && rawY && (rawX !== 0 || rawY !== 0);
+
+          let x: number, y: number;
+          if (hasCoords) {
+            x = rawX!; y = rawY!;
+          } else {
+            const sec = String(s.section_code ?? "?");
+            const idx = sectionCounter[sec]++;
+            const col = idx % COLS;
+            const row = Math.floor(idx / COLS);
+            const secRow = sectionIndex[sec];
+            x = 300 + col * (STALL_W + 40);
+            y = 200 + secRow * (SEC_PAD + Math.ceil(Object.keys(sectionIndex).length) * 20) + row * (STALL_H + 30);
+          }
+
+          return {
+            id: `stall-${String(s.stall_number).toLowerCase().replace(/-/g, "")}`,
+            number: s.stall_number as string,
+            section: `Section ${s.section_code}`,
+            vendor: (s.vendor_name as string) || "—",
+            category: s.category as string,
+            status: (STATUS_REMAP[s.status as string] || "vacant") as MarketStall["status"],
+            x, y,
+          };
+        });
+
+        setMapStalls(mapped);
+      } catch (err) {
+        console.error("Failed to load map stalls:", err);
+      }
     }
-  }, [isComplaintModalOpen]);
+    loadStalls();
+  }, []);
 
   const handleComplaintSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -342,29 +411,47 @@ export default function LucenaDecisionSupport() {
         </div>
       </header>
 
-      {/* Section 3: Price Alert Feed (Automated Carousel) */}
+      {/* Section 3: Price Alert Feed (Automated Horizontal Carousel) */}
       <div style={{ background: "#0A1B4A", color: "white", padding: "var(--space-2) 0", overflow: "hidden" }}>
-        <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 var(--space-6)", display: "flex", gap: "var(--space-8)", alignItems: "center" }}>
-          <span style={{ fontWeight: 800, color: "var(--color-primary)", textTransform: "uppercase", fontSize: "11px", letterSpacing: "1px", display: "flex", alignItems: "center" }}>
+        <style>{`
+          @keyframes marquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+          }
+          .marquee-content:hover {
+            animation-play-state: paused;
+          }
+          .ticker-wrapper {
+            display: flex;
+            gap: var(--space-8);
+            align-items: center;
+          }
+          @media (max-width: 640px) {
+            .ticker-wrapper {
+              flex-direction: column;
+              align-items: flex-start;
+              gap: var(--space-2);
+            }
+          }
+        `}</style>
+        <div className="ticker-wrapper" style={{ maxWidth: 1400, margin: "0 auto", padding: "0 var(--space-6)" }}>
+          <span style={{ fontWeight: 800, color: "var(--color-primary)", textTransform: "uppercase", fontSize: "11px", letterSpacing: "1px", display: "flex", alignItems: "center", whiteSpace: "nowrap", zIndex: 1, background: "#0A1B4A", paddingRight: "var(--space-4)" }}>
             <Bell size={12} style={{ marginRight: 4 }} /> Market Intelligence
           </span>
-          <div style={{ flex: 1, position: "relative", height: "20px" }}>
-            {ALERTS.map((a, i) => (
-              <div 
-                key={i} 
-                style={{ 
-                  position: "absolute", 
-                  top: 0, left: 0, 
-                  display: "flex", alignItems: "center", gap: "var(--space-2)", 
-                  fontSize: "var(--text-sm)", opacity: activeAlertIndex === i ? 0.9 : 0, 
-                  transform: activeAlertIndex === i ? "translateY(0)" : "translateY(10px)",
-                  transition: "all 0.5s ease-in-out",
-                  pointerEvents: activeAlertIndex === i ? "auto" : "none"
-                }}
-              >
-                {a.icon} {a.text}
-              </div>
-            ))}
+          <div style={{ flex: 1, position: "relative", height: "20px", overflow: "hidden", display: "flex", alignItems: "center", maskImage: "linear-gradient(to right, transparent, black 10px, black calc(100% - 10px), transparent)", WebkitMaskImage: "-webkit-linear-gradient(left, transparent, black 10px, black calc(100% - 10px), transparent)", width: "100%" }}>
+            <div className="marquee-content" style={{ display: "flex", gap: "var(--space-10)", animation: "marquee 30s linear infinite", whiteSpace: "nowrap", paddingLeft: "var(--space-4)" }}>
+              {ALERTS.map((a, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-sm)", opacity: 0.9 }}>
+                  {a.icon} <span>{a.text}</span>
+                </div>
+              ))}
+              {/* Duplicate for seamless loop */}
+              {ALERTS.map((a, i) => (
+                <div key={`dup-${i}`} style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-sm)", opacity: 0.9 }}>
+                  {a.icon} <span>{a.text}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -591,6 +678,24 @@ export default function LucenaDecisionSupport() {
                   </ResponsiveContainer>
                   ) : <div style={{ height: "100%", width: "100%" }} />}
                 </div>
+
+                <button 
+                  style={{ marginTop: "var(--space-3)", width: "100%", padding: "8px", background: "#F3F4F6", color: "var(--text-primary)", border: "none", borderRadius: "6px", fontWeight: 700, fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                  onClick={() => {
+                    const catMatches = mapStalls.filter(s => s.category.toLowerCase().includes(item.type.toLowerCase()) || s.category.toLowerCase().includes(item.category.toLowerCase()));
+                    setMapSearch(item.name);
+                    if (catMatches.length > 0) {
+                      setSelectedMapStallId(catMatches[0].id);
+                    } else {
+                      setSelectedMapStallId(null);
+                    }
+                    setHighlightedMapStallIds([]);
+                    setNavigationRoute(null);
+                    document.getElementById('market-navigator')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                >
+                  <MapPin size={14} /> Find in Market
+                </button>
               </div>
                   ))}
                 </>
@@ -651,6 +756,131 @@ export default function LucenaDecisionSupport() {
             return null;
           })()}
         </div>
+        {/* NEW SECTION: Market Navigator */}
+        <div id="market-navigator" style={{ marginBottom: "var(--space-10)" }}>
+          <h2 style={{ fontSize: "var(--text-2xl)", fontWeight: 800, color: "var(--color-accent)", margin: "0 0 var(--space-4) 0", display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+            <Map size={24} color="var(--color-primary)" /> Market Navigator
+          </h2>
+          <style>{`
+            .market-nav-grid {
+              display: grid;
+              grid-template-columns: 1fr 2fr;
+              gap: var(--space-6);
+              height: 600px;
+            }
+            .mobile-close-btn { display: none; }
+            .market-nav-left-panel { height: 100%; min-height: 0; }
+            
+            @media (max-width: 900px) {
+              .market-nav-grid {
+                display: flex;
+                flex-direction: column;
+                height: 700px;
+              }
+              .market-nav-left-panel {
+                height: auto !important;
+                max-height: ${isMobilePanelExpanded ? "450px" : "80px"} !important;
+                transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                box-shadow: ${isMobilePanelExpanded ? "0 10px 25px rgba(0,0,0,0.1)" : "none"};
+              }
+              .mobile-close-btn { 
+                display: ${isMobilePanelExpanded ? "flex" : "none"} !important; 
+              }
+            }
+          `}</style>
+          <div className="market-nav-grid">
+            {/* Left Panel: Intelligence Cards & Routing */}
+            <div className="card market-nav-left-panel" style={{ padding: "var(--space-5)", display: "flex", flexDirection: "column", gap: "var(--space-4)", overflow: "hidden", zIndex: 2, background: "white" }}>
+              <div style={{ position: "relative" }}>
+                <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+                <input 
+                  type="text" 
+                  placeholder="Search product, vendor, or stall..." 
+                  value={mapSearch}
+                  onChange={(e) => setMapSearch(e.target.value)}
+                  onFocus={() => setIsMobilePanelExpanded(true)}
+                  style={{ width: "100%", padding: "10px 36px 10px 36px", borderRadius: "var(--radius-md)", border: "1px solid #E2E8F0", fontSize: "14px" }}
+                />
+                <button 
+                  className="mobile-close-btn"
+                  onClick={(e) => { e.stopPropagation(); setIsMobilePanelExpanded(false); }}
+                  style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", alignItems: "center", justifyContent: "center", padding: 4 }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {navigationRoute && (
+                <div style={{ background: "#F0FDF4", padding: "var(--space-4)", borderRadius: "var(--radius-md)", border: "1px solid #BBF7D0", flexShrink: 0 }}>
+                  <div style={{ fontSize: "11px", fontWeight: 800, color: "#166534", textTransform: "uppercase", marginBottom: "8px" }}>Recommended Route</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "13px", fontWeight: 600, color: "#14532D" }}>
+                    {navigationRoute.points.map((p, i) => (
+                      <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <div style={{ width: 8, height: 8, borderRadius: 4, background: i === 0 ? "#10B981" : "#EF4444" }} />
+                          {p.label}
+                        </div>
+                        {i < navigationRoute.points.length - 1 && (
+                          <div style={{ paddingLeft: 3, margin: "2px 0", color: "#86EFAC" }}>↓</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: "12px", paddingTop: "8px", borderTop: "1px dashed #BBF7D0", fontSize: "12px", fontWeight: 700, color: "#166534" }}>
+                    Est. Walking Distance: ~{navigationRoute.totalDistanceMeters}m
+                  </div>
+                </div>
+              )}
+
+              <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", paddingRight: 4 }}>
+                {(() => {
+                  const query = mapSearch.toLowerCase();
+                  const results = query 
+                    ? mapStalls.filter(s => s.vendor.toLowerCase().includes(query) || s.category.toLowerCase().includes(query) || s.number.toLowerCase().includes(query))
+                    : mapStalls.slice(0, 10); // Show some defaults
+                  
+                  if (results.length === 0) return <div style={{ fontSize: "14px", color: "var(--text-muted)", textAlign: "center", padding: "20px" }}>No stalls found.</div>;
+                  
+                  return results.map(stall => (
+                    <div key={stall.id} style={{ padding: "var(--space-4)", background: "white", borderRadius: "var(--radius-md)", border: selectedMapStallId === stall.id ? "2px solid var(--color-primary)" : "1px solid #E2E8F0", cursor: "pointer", flexShrink: 0 }} onClick={() => setSelectedMapStallId(stall.id)}>
+                      <div style={{ fontSize: "12px", fontWeight: 800, color: "var(--color-primary)", marginBottom: 4 }}>STALL {stall.number}</div>
+                      <div style={{ fontSize: "16px", fontWeight: 800, color: "var(--text-primary)", marginBottom: 8 }}>{stall.vendor !== "—" ? stall.vendor : "Vacant Stall"}</div>
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: 4 }}><span style={{ fontWeight: 700 }}>Category:</span> {stall.category}</div>
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: 12 }}><span style={{ fontWeight: 700 }}>Products:</span> Assorted {stall.category.toLowerCase()}</div>
+                      <button className="btn btn-ghost" style={{ width: "100%", padding: "6px", fontSize: "12px", background: "#F1F5F9" }} onClick={(e) => { e.stopPropagation(); setSelectedMapStallId(stall.id); }}>
+                        View on Map
+                      </button>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
+
+            {/* Right Panel: Interactive Map */}
+            <div style={{ borderRadius: "var(--radius-lg)", overflow: "hidden", border: "1px solid #E2E8F0", background: "white", minHeight: 0, height: "100%", display: "flex" }}>
+              <div style={{ flex: 1, width: "100%", height: "100%" }}>
+                <MarketMap 
+                stalls={mapStalls} 
+                selectedStallId={selectedMapStallId} 
+                highlightedStallIds={highlightedMapStallIds}
+                navigationRoute={navigationRoute}
+                onStallSelect={(s) => setSelectedMapStallId(s ? s.id : null)}
+                onGetDirections={(stall) => {
+                  setNavigationRoute({
+                    points: [
+                      { x: 3900, y: 4900, label: "Entrance" },
+                      { x: stall.x, y: stall.y, label: `Stall ${stall.number} (${stall.vendor})` }
+                    ],
+                    totalDistanceMeters: Math.floor(Math.sqrt(Math.pow(stall.x - 3900, 2) + Math.pow(stall.y - 4900, 2)) / 50)
+                  });
+                }}
+                padding={{ top: 20, right: 20, bottom: 20, left: 20 }}
+              />
+              </div>
+            </div>
+          </div>
+        </div>
+
 
         {/* Multi-Column Layout for Middle Sections */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 400px), 1fr))", gap: "var(--space-8)", marginBottom: "var(--space-10)" }}>
@@ -720,6 +950,44 @@ export default function LucenaDecisionSupport() {
                         </div>
                       ))}
                     </div>
+
+                    <button 
+                      style={{ marginTop: "var(--space-4)", width: "100%", padding: "10px", background: "var(--color-primary)", color: "var(--color-accent)", border: "none", borderRadius: "6px", fontWeight: 800, fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                      onClick={() => {
+                        const ENTRANCE = { x: 3900, y: 4900, label: "Entrance" };
+                        let currentPos: { x: number, y: number } = ENTRANCE;
+                        let dist = 0;
+                        const routePoints = [ENTRANCE];
+                        const highlighted: string[] = [];
+
+                        activeRecipeCost.breakdown.forEach(ing => {
+                          const query = ing.commodityName.toLowerCase();
+                          // Find stalls that match this ingredient's category
+                          const matches = mapStalls.filter(s => s.category.toLowerCase().includes(query) || s.vendor.toLowerCase().includes(query));
+                          if (matches.length > 0) {
+                            // Find nearest matching stall to currentPos
+                            const nearest = matches.reduce((prev, curr) => {
+                              const dPrev = Math.sqrt(Math.pow(prev.x - currentPos.x, 2) + Math.pow(prev.y - currentPos.y, 2));
+                              const dCurr = Math.sqrt(Math.pow(curr.x - currentPos.x, 2) + Math.pow(curr.y - currentPos.y, 2));
+                              return dCurr < dPrev ? curr : prev;
+                            });
+
+                            dist += Math.floor(Math.sqrt(Math.pow(nearest.x - currentPos.x, 2) + Math.pow(nearest.y - currentPos.y, 2)) / 50);
+                            routePoints.push({ x: nearest.x, y: nearest.y, label: `${ing.commodityName} (Stall ${nearest.number})` });
+                            highlighted.push(nearest.id);
+                            currentPos = nearest;
+                          }
+                        });
+
+                        setNavigationRoute({ points: routePoints, totalDistanceMeters: dist });
+                        setHighlightedMapStallIds(highlighted);
+                        setMapSearch(""); // Clear search to show the route instructions
+                        setSelectedMapStallId(null);
+                        document.getElementById('market-navigator')?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                    >
+                      <MapPin size={16} /> Find Ingredients in Market
+                    </button>
                   </div>
                 )}
               </div>
