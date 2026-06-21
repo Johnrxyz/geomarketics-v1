@@ -6,7 +6,8 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Map, Store, AlertCircle,
   BarChart2, Globe, Users, FileText,
-  ChevronLeft, ChevronRight, LogOut, ClipboardCheck
+  ChevronLeft, ChevronRight, LogOut, ClipboardCheck,
+  FileWarning, Gavel, Brain, Activity
 } from "lucide-react";
 
 type Role = "admin" | "vendor" | "customer";
@@ -24,7 +25,11 @@ const adminNav: NavItem[] = [
   { label: "Documents", href: "/admin/documents", icon: <FileText size={18} /> },
   { label: "Sanitation", href: "/admin/sanitation", icon: <ClipboardCheck size={18} /> },
   { label: "Complaints", href: "/admin/complaints", icon: <AlertCircle size={18} /> },
+  { label: "Blotters", href: "/admin/blotters", icon: <FileWarning size={18} /> },
+  { label: "Violations", href: "/admin/violations", icon: <Gavel size={18} /> },
+  { label: "AI Risk", href: "/admin/ai-risk", icon: <Brain size={18} /> },
   { label: "Reports", href: "/admin/reports", icon: <BarChart2 size={18} /> },
+  { label: "Operations", href: "/admin/operations", icon: <Activity size={18} /> },
 ];
 
 const vendorNav: NavItem[] = [
@@ -32,6 +37,7 @@ const vendorNav: NavItem[] = [
   { label: "Market Map", href: "/map", icon: <Map size={18} /> },
   { label: "Documents", href: "/vendor/documents", icon: <FileText size={18} /> },
   { label: "My Complaints", href: "/vendor/complaints", icon: <AlertCircle size={18} /> },
+  { label: "My Violations", href: "/vendor/violations", icon: <Gavel size={18} /> },
 ];
 
 const customerNav: NavItem[] = [

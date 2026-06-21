@@ -1,34 +1,50 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import AppShell from "@/components/layout/AppShell";
 import { Search, ChevronRight, ChevronUp, ChevronDown, SlidersHorizontal, List, X } from "lucide-react";
-import MarketMap, { MarketStall, STATUS_MAP } from "@/components/map/MarketMap";
+import MarketMap, {
+  MarketStall,
+  OCCUPANCY_CONFIG,
+  OccupancyStatus,
+  BuildingId,
+  FloorId,
+} from "@/components/map/MarketMap";
+import { LEGACY_TO_OCCUPANCY, LEGACY_TO_COMPLIANCE, MapLayerId, MAP_LAYERS } from "@/components/map/types";
+import { getLegendEntries } from "@/components/map/MapLegend";
 import { stallsApi } from "@/lib/api";
 import { useAuthGuard } from "@/lib/useAuthGuard";
 
 const CATEGORIES = ["All", "Vegetables", "Meat", "Fish", "Dry Goods", "Cooked Food", "Fruits"];
-const STATUSES = ["All", "occupied", "vacant", "reserved", "flagged", "closed", "storage", "ambulant"];
+const OCCUPANCY_STATUSES: ("All" | OccupancyStatus)[] = ["All", "occupied", "vacant", "reserved", "maintenance"];
 
-const STATUS_REMAP: Record<string, string> = {
-  occupied: "owner",
-  vacant: "vacant",
-  reserved: "storage",
-  flagged: "rented",
-  closed: "closed",
-  storage: "storage",
-  ambulant: "ambulant",
-};
+
 
 export default function MapPage() {
   const { ready, user: authUser } = useAuthGuard();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   const [stalls, setStalls] = useState<MarketStall[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStallId, setSelectedStallId] = useState<string | null>(null);
   const [focusTrigger, setFocusTrigger] = useState(0);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
-  const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [statusFilter, setStatusFilter] = useState<"All" | OccupancyStatus>("All");
+  const [activeLayer, setActiveLayer] = useState<MapLayerId>("stall_status");
+
+  // URL-synced building + floor
+  const activeBuilding = (searchParams.get("building") ?? "main") as BuildingId;
+  const activeFloor = (searchParams.get("floor") ?? "1") as FloorId;
+
+  const handleBuildingFloorChange = (building: BuildingId, floor: FloorId) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("building", building);
+    params.set("floor", floor);
+    router.push(`/map?${params.toString()}`, { scroll: false });
+  };
 
   // Mobile bottom drawer
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -48,43 +64,41 @@ export default function MapPage() {
   const fetchStalls = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await stallsApi.list({ page_size: "100" }) as { results: Record<string, unknown>[] };
+      const data = await stallsApi.list({ page_size: "200" }) as { results: Record<string, unknown>[] };
       const items = (data.results || []) as Record<string, unknown>[];
 
+      // Fallback grid layout for stalls without SVG coordinates
       const STALL_W = 200;
       const STALL_H = 120;
       const COLS    = 12;
       const SEC_PAD = 400;
-
       const sectionIndex: Record<string, number> = {};
       const sectionCounter: Record<string, number> = {};
       let secOrder = 0;
-
       items.forEach((s) => {
         const sec = String(s.section_code ?? "?");
-        if (!(sec in sectionIndex)) {
-          sectionIndex[sec] = secOrder++;
-          sectionCounter[sec] = 0;
-        }
+        if (!(sec in sectionIndex)) { sectionIndex[sec] = secOrder++; sectionCounter[sec] = 0; }
       });
 
       const mapped: MarketStall[] = items.map((s) => {
-        const rawX = s.map_x as number | null;
-        const rawY = s.map_y as number | null;
-        const hasCoords = rawX && rawY && (rawX !== 0 || rawY !== 0);
+        const rawX = s.svg_x as number | null;
+        const rawY = s.svg_y as number | null;
+        const hasCoords = rawX != null && rawY != null && (rawX !== 0 || rawY !== 0);
 
-        let x: number, y: number;
+        let svg_x: number, svg_y: number;
         if (hasCoords) {
-          x = rawX!; y = rawY!;
+          svg_x = rawX!; svg_y = rawY!;
         } else {
           const sec = String(s.section_code ?? "?");
           const idx = sectionCounter[sec]++;
           const col = idx % COLS;
           const row = Math.floor(idx / COLS);
           const secRow = sectionIndex[sec];
-          x = 300 + col * (STALL_W + 40);
-          y = 200 + secRow * (SEC_PAD + Math.ceil(Object.keys(sectionIndex).length) * 20) + row * (STALL_H + 30);
+          svg_x = 300 + col * (STALL_W + 40);
+          svg_y = 200 + secRow * (SEC_PAD + Math.ceil(Object.keys(sectionIndex).length) * 20) + row * (STALL_H + 30);
         }
+
+        const legacyStatus = String(s.status ?? "vacant");
 
         return {
           id: `stall-${String(s.stall_number).toLowerCase().replace(/-/g, "")}`,
@@ -92,8 +106,14 @@ export default function MapPage() {
           section: `Section ${s.section_code}`,
           vendor: (s.vendor_name as string) || "—",
           category: s.category as string,
-          status: (STATUS_REMAP[s.status as string] || "vacant") as MarketStall["status"],
-          x, y,
+          // New dual-status fields (use API values if present, else derive from legacy)
+          occupancy_status: (s.occupancy_status as OccupancyStatus) ?? LEGACY_TO_OCCUPANCY[legacyStatus] ?? "vacant",
+          compliance_status: (s.compliance_status as MarketStall["compliance_status"]) ?? LEGACY_TO_COMPLIANCE[legacyStatus] ?? null,
+          svg_x,
+          svg_y,
+          polygon_data: (s.polygon_data as string | undefined),
+          building: (s.building as BuildingId) ?? "main",
+          floor: (s.floor as FloorId) ?? "1",
         };
       });
 
@@ -113,10 +133,12 @@ export default function MapPage() {
     const matchSearch = !search ||
       s.number.toLowerCase().includes(search.toLowerCase()) ||
       s.vendor.toLowerCase().includes(search.toLowerCase()) ||
-      s.category.toLowerCase().includes(search.toLowerCase());
+      (s.category ?? "").toLowerCase().includes(search.toLowerCase());
     const matchCat = categoryFilter === "All" || s.category === categoryFilter;
-    const matchStatus = statusFilter === "All" || s.status === statusFilter;
-    return matchSearch && matchCat && matchStatus;
+    const matchStatus = statusFilter === "All" || s.occupancy_status === statusFilter;
+    // Only show stalls for the currently active building/floor
+    const matchFloor = s.building === activeBuilding && s.floor === activeFloor;
+    return matchSearch && matchCat && matchStatus && matchFloor;
   });
 
   // Map padding changes based on viewport
@@ -126,14 +148,14 @@ export default function MapPage() {
 
   /* ── Shared stall list item ── */
   const StallItem = ({ stall }: { stall: MarketStall }) => {
-    const conf = STATUS_MAP[stall.status as keyof typeof STATUS_MAP] || STATUS_MAP["vacant"];
+    const conf = OCCUPANCY_CONFIG[stall.occupancy_status] ?? OCCUPANCY_CONFIG.vacant;
     const isSelected = selectedStallId === stall.id;
     return (
       <button
         onClick={() => {
           setSelectedStallId(stall.id);
           setFocusTrigger(prev => prev + 1);
-          if (isMobile) setDrawerOpen(false); // close drawer on mobile after selection
+          if (isMobile) setDrawerOpen(false);
         }}
         style={{
           width: "100%", padding: "12px 14px", textAlign: "left",
@@ -180,29 +202,28 @@ export default function MapPage() {
     </button>
   );
 
-  /* ── Always-visible legend (desktop inline) ── */
-  const LegendGrid = () => (
+  /* ── Sidebar legend — dynamically uses active layer ── */
+  const LegendGrid = () => {
+    const entries = getLegendEntries(activeLayer);
+    return (
     <div style={{
       display: "grid", gridTemplateColumns: "1fr 1fr",
       gap: "var(--space-2) var(--space-3)",
       padding: "16px 20px",
     }}>
-      {(Object.keys(STATUS_MAP) as (keyof typeof STATUS_MAP)[]).map((status) => {
-        const conf = STATUS_MAP[status];
-        return (
-          <div key={status} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <div style={{
-              width: 14, height: 14, borderRadius: 4, flexShrink: 0,
-              background: conf.color, border: `2px solid ${conf.border}`,
-            }} />
-            <span style={{ fontSize: "11px", fontWeight: 500, color: "var(--text-secondary)", lineHeight: 1.2 }}>
-              {conf.label}
-            </span>
-          </div>
-        );
-      })}
+      {entries.map((conf) => (
+        <div key={conf.key} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div style={{
+            width: 14, height: 14, borderRadius: conf.shape === "ring" ? "50%" : 4, flexShrink: 0,
+            background: conf.color, border: `2px solid ${conf.border}`,
+          }} />
+          <span style={{ fontSize: "11px", fontWeight: 500, color: "var(--text-secondary)", lineHeight: 1.2 }}>
+            {conf.label}
+          </span>
+        </div>
+      ))}
     </div>
-  );
+  )};
 
   const glassStyle = {
     background: "rgba(255, 255, 255, 0.88)",
@@ -229,8 +250,15 @@ export default function MapPage() {
             selectedStallId={selectedStallId}
             onStallSelect={(s) => setSelectedStallId(s ? s.id : null)}
             showAdminLinks={role === "admin"}
+            showAdminLayers={role === "admin"}
             padding={mapPadding}
             focusTrigger={focusTrigger}
+            initialBuilding={activeBuilding}
+            initialFloor={activeFloor}
+            onBuildingFloorChange={handleBuildingFloorChange}
+            activeLayerId={activeLayer}
+            onLayerChange={setActiveLayer}
+            hideFloatingControls={true}
           />
         </div>
 
@@ -253,6 +281,30 @@ export default function MapPage() {
         >
           {/* Search + Filters */}
           <div style={{ ...glassStyle, borderRadius: "18px", padding: "16px", pointerEvents: "auto" }}>
+            
+            {/* Map Layers */}
+            <div style={{ marginBottom: "16px" }}>
+              <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "6px" }}>Map Layer</div>
+              <div style={{ position: "relative" }}>
+                <select
+                  value={activeLayer}
+                  onChange={(e) => setActiveLayer(e.target.value as MapLayerId)}
+                  style={{
+                    width: "100%", padding: "8px 10px",
+                    border: "1.5px solid #E5E7EB", borderRadius: "10px",
+                    fontSize: "13px", background: "rgba(255,255,255,0.6)",
+                    outline: "none", fontFamily: "inherit", fontWeight: 600, color: "var(--text-primary)",
+                    appearance: "none", cursor: "pointer"
+                  }}
+                >
+                  {MAP_LAYERS.filter(l => !l.adminOnly || role === "admin").map(l => (
+                    <option key={l.id} value={l.id}>{l.icon} {l.label}</option>
+                  ))}
+                </select>
+                <ChevronDown size={14} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
+              </div>
+            </div>
+
             {/* Search */}
             <div style={{ position: "relative", marginBottom: "12px" }}>
               <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
@@ -281,14 +333,14 @@ export default function MapPage() {
               </div>
             </div>
 
-            {/* Status chips */}
+            {/* Occupancy Status chips */}
             <div>
-              <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "6px" }}>Status</div>
+              <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "6px" }}>Occupancy Status</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-                {STATUSES.map(s => (
+                {OCCUPANCY_STATUSES.map(s => (
                   <Chip
                     key={s}
-                    label={s === "All" ? "All" : (STATUS_MAP[STATUS_REMAP[s] as keyof typeof STATUS_MAP]?.label || s)}
+                    label={s === "All" ? "All" : (OCCUPANCY_CONFIG[s as OccupancyStatus]?.label ?? s)}
                     active={statusFilter === s}
                     onClick={() => setStatusFilter(s)}
                   />
@@ -451,12 +503,12 @@ export default function MapPage() {
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "8px" }}>Status</div>
+                    <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "8px" }}>Occupancy Status</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                      {STATUSES.map(s => (
+                      {OCCUPANCY_STATUSES.map(s => (
                         <Chip
                           key={s}
-                          label={s === "All" ? "All" : (STATUS_MAP[STATUS_REMAP[s] as keyof typeof STATUS_MAP]?.label || s)}
+                          label={s === "All" ? "All" : (OCCUPANCY_CONFIG[s as OccupancyStatus]?.label ?? s)}
                           active={statusFilter === s}
                           onClick={() => setStatusFilter(s)}
                         />

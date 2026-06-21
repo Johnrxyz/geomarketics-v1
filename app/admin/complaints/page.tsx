@@ -145,6 +145,18 @@ export default function ComplaintsPage() {
     }
   };
 
+  const escalateToBlotter = async (id: string) => {
+    setUpdating(true);
+    try {
+      await complaintsApi.escalate(id);
+      alert("Successfully escalated to Blotter.");
+    } catch (err: any) {
+      alert(err?.detail ?? err?.message ?? "Failed to escalate to Blotter.");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const submitComplaint = async () => {
     if (!newComplaint.description.trim()) return;
     setSubmitting(true);
@@ -368,6 +380,11 @@ export default function ComplaintsPage() {
                       <CheckCircle size={14} /> Mark Resolved
                     </button>
                   </div>
+                  <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap", marginTop: "var(--space-4)", paddingTop: "var(--space-4)", borderTop: "1px solid var(--border-color)" }}>
+                    <button className="btn btn-danger" onClick={() => escalateToBlotter(selected.id)} disabled={updating}>
+                      <AlertCircle size={14} /> Escalate to Blotter
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -529,6 +546,11 @@ export default function ComplaintsPage() {
                       <button className="btn btn-success" onClick={() => updateStatus(selected.id, "resolved")}
                         disabled={selected.status === "resolved" || updating} style={{ justifyContent: "center" }}>
                         <CheckCircle size={14} /> Mark Resolved
+                      </button>
+                    </div>
+                    <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap", flexDirection: "column", marginTop: "var(--space-4)", paddingTop: "var(--space-4)", borderTop: "1px solid var(--border-color)" }}>
+                      <button className="btn btn-danger" onClick={() => escalateToBlotter(selected.id)} disabled={updating} style={{ justifyContent: "center" }}>
+                        <AlertCircle size={14} /> Escalate to Blotter
                       </button>
                     </div>
                   </div>

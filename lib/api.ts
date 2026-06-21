@@ -242,6 +242,13 @@ export const complaintsApi = {
     const res = await apiFetch('/complaints/summary/');
     return json(res);
   },
+
+  async escalate(id: number | string) {
+    const res = await apiFetch(`/complaints/${id}/escalate/`, {
+      method: 'POST',
+    });
+    return json(res);
+  },
 };
 
 // ─── Documents API ───────────────────────────────────────────────────────────
@@ -428,6 +435,78 @@ export const unknownEntitiesApi = {
     const res = await apiFetch(`/unknown-entities/${id}/resolve/`, {
       method: 'POST',
       body: JSON.stringify(data)
+    });
+    return json(res);
+  }
+};
+
+// ─── Violations API ──────────────────────────────────────────────────────────
+
+export const violationsApi = {
+  async list(params: Record<string, string> = {}) {
+    const qs = new URLSearchParams(params).toString();
+    const res = await apiFetch(`/violations/${qs ? '?' + qs : ''}`);
+    return json(res);
+  },
+  async get(id: number | string) {
+    const res = await apiFetch(`/violations/${id}/`);
+    return json(res);
+  },
+  async create(data: Record<string, unknown>) {
+    const res = await apiFetch('/violations/', { method: 'POST', body: JSON.stringify(data) });
+    return json(res);
+  },
+  async update(id: number | string, data: Record<string, unknown>) {
+    const res = await apiFetch(`/violations/${id}/`, { method: 'PATCH', body: JSON.stringify(data) });
+    return json(res);
+  }
+};
+
+// ─── Blotters API ──────────────────────────────────────────────────────────
+
+export const blottersApi = {
+  async list(params: Record<string, string> = {}) {
+    const qs = new URLSearchParams(params).toString();
+    const res = await apiFetch(`/blotters/${qs ? '?' + qs : ''}`);
+    return json(res);
+  },
+  async create(data: Record<string, unknown>) {
+    const res = await apiFetch('/blotters/', { method: 'POST', body: JSON.stringify(data) });
+    return json(res);
+  },
+  async update(id: number | string, data: Record<string, unknown>) {
+    const res = await apiFetch(`/blotters/${id}/`, { method: 'PATCH', body: JSON.stringify(data) });
+    return json(res);
+  }
+};
+
+// ─── AI Risk API ──────────────────────────────────────────────────────────
+
+export const aiRiskApi = {
+  async list(params: Record<string, string> = {}) {
+    const qs = new URLSearchParams(params).toString();
+    const res = await apiFetch(`/ai-risk/${qs ? '?' + qs : ''}`);
+    return json(res);
+  },
+
+  async recompute() {
+    const res = await apiFetch('/ai-risk/recompute/', { method: 'POST' });
+    return json(res);
+  }
+};
+
+// ─── Accomplishment Reports API ──────────────────────────────────────────────
+
+export const accomplishmentApi = {
+  async list(params: Record<string, string> = {}) {
+    const qs = new URLSearchParams(params).toString();
+    const res = await apiFetch(`/accomplishment-reports/${qs ? '?' + qs : ''}`);
+    return json(res);
+  },
+  async generate(data: { period_start: string; period_end: string }) {
+    const res = await apiFetch('/accomplishment-reports/generate/', {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
     return json(res);
   }

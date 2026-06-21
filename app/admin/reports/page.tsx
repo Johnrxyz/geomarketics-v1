@@ -7,7 +7,7 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
-import { analyticsApi, sectionsApi, getUser } from "@/lib/api";
+import { analyticsApi, sectionsApi, getUser, accomplishmentApi } from "@/lib/api";
 
 interface ReportData {
   occupancy: { total: number; occupied: number; vacant: number; reserved: number; flagged: number; rate: number };
@@ -27,6 +27,7 @@ export default function ReportsPage() {
   const [summaryPeriod, setSummaryPeriod] = useState("monthly");
   const [generated, setGenerated] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [sections, setSections] = useState<{ id: number; code: string; name: string }[]>([]);
   const user = getUser();
@@ -55,6 +56,18 @@ export default function ReportsPage() {
       setLoading(false);
     }
   }, [startDate, endDate, sectionFilter, sections]);
+
+  const generateAndSaveReport = async () => {
+    setSaving(true);
+    try {
+      await accomplishmentApi.generate({ period_start: startDate, period_end: endDate });
+      alert("Report generated and saved to database successfully!");
+    } catch (e) {
+      alert("Failed to save report.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const occupancyPie = reportData ? [
     { name: "Occupied",  value: reportData.occupancy.occupied,  color: PIE_COLORS[0] },
@@ -140,9 +153,12 @@ export default function ReportsPage() {
               </select>
             </div>
           </div>
-          <div style={{display:"flex",justifyContent:"flex-end",marginTop:"var(--space-4)"}} className="no-print">
-            <button className="btn btn-accent" onClick={generateReport} disabled={loading}>
-              <BarChart2 size={15} /> {loading ? "Generating..." : "Generate Report"}
+          <div style={{display:"flex",justifyContent:"flex-end",marginTop:"var(--space-4)", gap:"var(--space-2)"}} className="no-print">
+            <button className="btn btn-outline" onClick={generateAndSaveReport} disabled={loading || saving}>
+              <FileText size={15} /> {saving ? "Saving..." : "Generate & Save Report"}
+            </button>
+            <button className="btn btn-accent" onClick={generateReport} disabled={loading || saving}>
+              <BarChart2 size={15} /> {loading ? "Generating..." : "Preview Report"}
             </button>
           </div>
         </div>

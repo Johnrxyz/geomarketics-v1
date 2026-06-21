@@ -9,7 +9,9 @@ import {
 } from "lucide-react";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceDot } from "recharts";
 import { complaintsApi, stallsApi } from "@/lib/api";
-import MarketMap, { MarketStall, STATUS_MAP } from "@/components/map/MarketMap";
+import MarketMap, { MarketStall, OCCUPANCY_CONFIG } from "@/components/map/MarketMap";
+import { LEGACY_TO_OCCUPANCY, LEGACY_TO_COMPLIANCE } from "@/components/map/types";
+import { getLegendEntries } from "@/components/map/MapLegend";
 import { RECIPES, Recipe } from "../../data/recipes";
 
 // --- MOCK DATA STRATEGY (FALLBACK FOR THESIS DEMO) ---
@@ -116,36 +118,30 @@ export default function LucenaDecisionSupport() {
         const sectionCounter: Record<string, number> = {};
         let secOrder = 0;
 
-        const STATUS_REMAP: Record<string, string> = {
-          occupied: "owner", vacant: "vacant", reserved: "storage", flagged: "rented",
-          closed: "closed", storage: "storage", ambulant: "ambulant",
-        };
-
         items.forEach((s: any) => {
           const sec = String(s.section_code ?? "?");
-          if (!(sec in sectionIndex)) {
-            sectionIndex[sec] = secOrder++;
-            sectionCounter[sec] = 0;
-          }
+          if (!(sec in sectionIndex)) { sectionIndex[sec] = secOrder++; sectionCounter[sec] = 0; }
         });
 
         const mapped: MarketStall[] = items.map((s: any) => {
-          const rawX = s.map_x as number | null;
-          const rawY = s.map_y as number | null;
-          const hasCoords = rawX && rawY && (rawX !== 0 || rawY !== 0);
+          const rawX = s.svg_x as number | null;
+          const rawY = s.svg_y as number | null;
+          const hasCoords = rawX != null && rawY != null && (rawX !== 0 || rawY !== 0);
 
-          let x: number, y: number;
+          let svg_x: number, svg_y: number;
           if (hasCoords) {
-            x = rawX!; y = rawY!;
+            svg_x = rawX!; svg_y = rawY!;
           } else {
             const sec = String(s.section_code ?? "?");
             const idx = sectionCounter[sec]++;
             const col = idx % COLS;
             const row = Math.floor(idx / COLS);
             const secRow = sectionIndex[sec];
-            x = 300 + col * (STALL_W + 40);
-            y = 200 + secRow * (SEC_PAD + Math.ceil(Object.keys(sectionIndex).length) * 20) + row * (STALL_H + 30);
+            svg_x = 300 + col * (STALL_W + 40);
+            svg_y = 200 + secRow * (SEC_PAD + Math.ceil(Object.keys(sectionIndex).length) * 20) + row * (STALL_H + 30);
           }
+
+          const legacyStatus = String(s.status ?? "vacant");
 
           return {
             id: `stall-${String(s.stall_number).toLowerCase().replace(/-/g, "")}`,
@@ -153,8 +149,13 @@ export default function LucenaDecisionSupport() {
             section: `Section ${s.section_code}`,
             vendor: (s.vendor_name as string) || "—",
             category: s.category as string,
-            status: (STATUS_REMAP[s.status as string] || "vacant") as MarketStall["status"],
-            x, y,
+            occupancy_status: s.occupancy_status ?? LEGACY_TO_OCCUPANCY[legacyStatus] ?? "vacant",
+            compliance_status: s.compliance_status ?? LEGACY_TO_COMPLIANCE[legacyStatus] ?? null,
+            svg_x,
+            svg_y,
+            polygon_data: s.polygon_data ?? undefined,
+            building: s.building ?? "main",
+            floor: s.floor ?? "1",
           };
         });
 
@@ -764,9 +765,9 @@ export default function LucenaDecisionSupport() {
           <style>{`
             .market-nav-grid {
               display: grid;
-              grid-template-columns: 1fr 2fr;
+              grid-template-columns: 280px 1fr;
               gap: var(--space-6);
-              height: 600px;
+              height: 650px;
             }
             .mobile-close-btn { display: none; }
             .market-nav-left-panel { height: 100%; min-height: 0; }
@@ -854,6 +855,22 @@ export default function LucenaDecisionSupport() {
                   ));
                 })()}
               </div>
+
+              {/* Map Legend */}
+              <div style={{ flexShrink: 0, borderTop: "1px solid #E2E8F0", paddingTop: "var(--space-3)" }}>
+                <div style={{ fontSize: "10px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "var(--space-2)", display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 7, height: 7, borderRadius: 2, background: "var(--color-primary)" }} />
+                  Map Legend
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 12px" }}>
+                  {getLegendEntries("stall_status").map((entry) => (
+                    <div key={entry.key} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                      <div style={{ width: 12, height: 12, borderRadius: 3, flexShrink: 0, background: entry.color, border: `2px solid ${entry.border}` }} />
+                      <span style={{ fontSize: "11px", fontWeight: 500, color: "var(--text-secondary)", lineHeight: 1.2 }}>{entry.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {/* Right Panel: Interactive Map */}
@@ -869,11 +886,14 @@ export default function LucenaDecisionSupport() {
                   setNavigationRoute({
                     points: [
                       { x: 3900, y: 4900, label: "Entrance" },
-                      { x: stall.x, y: stall.y, label: `Stall ${stall.number} (${stall.vendor})` }
+                      { x: stall.svg_x, y: stall.svg_y, label: `Stall ${stall.number} (${stall.vendor})` }
                     ],
-                    totalDistanceMeters: Math.floor(Math.sqrt(Math.pow(stall.x - 3900, 2) + Math.pow(stall.y - 4900, 2)) / 50)
+                    totalDistanceMeters: Math.floor(Math.sqrt(Math.pow(stall.svg_x - 3900, 2) + Math.pow(stall.svg_y - 4900, 2)) / 50)
                   });
                 }}
+                showAdminLayers={false}
+                hideFloatingControls={true}
+                unifiedFloorView={true}
                 padding={{ top: 20, right: 20, bottom: 20, left: 20 }}
               />
               </div>
@@ -967,15 +987,15 @@ export default function LucenaDecisionSupport() {
                           if (matches.length > 0) {
                             // Find nearest matching stall to currentPos
                             const nearest = matches.reduce((prev, curr) => {
-                              const dPrev = Math.sqrt(Math.pow(prev.x - currentPos.x, 2) + Math.pow(prev.y - currentPos.y, 2));
-                              const dCurr = Math.sqrt(Math.pow(curr.x - currentPos.x, 2) + Math.pow(curr.y - currentPos.y, 2));
+                              const dPrev = Math.sqrt(Math.pow(prev.svg_x - currentPos.x, 2) + Math.pow(prev.svg_y - currentPos.y, 2));
+                              const dCurr = Math.sqrt(Math.pow(curr.svg_x - currentPos.x, 2) + Math.pow(curr.svg_y - currentPos.y, 2));
                               return dCurr < dPrev ? curr : prev;
                             });
 
-                            dist += Math.floor(Math.sqrt(Math.pow(nearest.x - currentPos.x, 2) + Math.pow(nearest.y - currentPos.y, 2)) / 50);
-                            routePoints.push({ x: nearest.x, y: nearest.y, label: `${ing.commodityName} (Stall ${nearest.number})` });
+                            dist += Math.floor(Math.sqrt(Math.pow(nearest.svg_x - currentPos.x, 2) + Math.pow(nearest.svg_y - currentPos.y, 2)) / 50);
+                            routePoints.push({ x: nearest.svg_x, y: nearest.svg_y, label: `${ing.commodityName} (Stall ${nearest.number})` });
                             highlighted.push(nearest.id);
-                            currentPos = nearest;
+                            currentPos = { x: nearest.svg_x, y: nearest.svg_y };
                           }
                         });
 
