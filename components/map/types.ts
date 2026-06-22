@@ -193,7 +193,7 @@ export const LEGACY_TO_OCCUPANCY: Record<string, OccupancyStatus> = {
   flagged:     'closed',
   // Identity mappings (if backend sends the exact new value)
   surrendered_bolante: 'surrendered_bolante',
-  surrendered_vacant: 'surrendered_vacant',
+  surrendered_vacant: 'vacant',
 };
 
 export const LEGACY_TO_COMPLIANCE: Record<string, ComplianceStatus | null> = {

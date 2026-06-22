@@ -96,10 +96,10 @@ export default function MapStatsBar({
           display: "flex",
           alignItems: "center",
           gap: 0,
-          background: "rgba(8, 14, 30, 0.85)",
+          background: "rgba(255, 255, 255, 0.85)",
           backdropFilter: "blur(24px)",
           WebkitBackdropFilter: "blur(24px)",
-          border: "1px solid rgba(255,255,255,0.10)",
+          border: "1px solid rgba(0,0,0,0.10)",
           borderRadius: 14,
           boxShadow: "0 4px 24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)",
           overflow: "hidden",
@@ -144,7 +144,7 @@ export default function MapStatsBar({
           display: "inline-flex",
           alignItems: "center",
           gap: 6,
-          background: "rgba(8, 14, 30, 0.75)",
+          background: "rgba(255, 255, 255, 0.75)",
           backdropFilter: "blur(16px)",
           WebkitBackdropFilter: "blur(16px)",
           border: "1px solid rgba(99,102,241,0.25)",
@@ -159,7 +159,7 @@ export default function MapStatsBar({
           style={{
             fontSize: 10,
             fontWeight: 700,
-            color: "rgba(255,255,255,0.6)",
+            color: "rgba(0,0,0,0.7)",
             textTransform: "uppercase",
             letterSpacing: "0.08em",
           }}
@@ -170,7 +170,7 @@ export default function MapStatsBar({
           style={{
             fontSize: 10,
             fontWeight: 600,
-            color: "rgba(255,255,255,0.3)",
+            color: "rgba(0,0,0,0.5)",
           }}
         >
           · Floor {activeFloor}
@@ -210,7 +210,7 @@ function StatCell({
         flexDirection: "column",
         alignItems: "center",
         gap: 2,
-        borderRight: borderRight ? "1px solid rgba(255,255,255,0.07)" : undefined,
+        borderRight: borderRight ? "1px solid rgba(0,0,0,0.1)" : undefined,
         minWidth: 72,
       }}
     >
@@ -232,7 +232,7 @@ function StatCell({
         style={{
           fontSize: 9,
           fontWeight: 700,
-          color: "rgba(255,255,255,0.4)",
+          color: "rgba(0,0,0,0.5)",
           textTransform: "uppercase",
           letterSpacing: "0.07em",
           whiteSpace: "nowrap",
