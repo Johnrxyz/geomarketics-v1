@@ -65,7 +65,7 @@ export default function MapStatsBar({
   ).length;
 
   const flaggedCount = floorStalls.filter(
-    (s) => s.compliance_status === "non_compliant" || s.compliance_status === "pending"
+    (s) => s.compliance_status === "high_risk" || s.compliance_status === "warning"
   ).length;
 
   const occupancyPct = total > 0 ? Math.round((occupiedCount / total) * 100) : 0;
