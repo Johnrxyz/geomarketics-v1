@@ -459,116 +459,76 @@ export default function LucenaDecisionSupport() {
         </div>
       </div>
 
+      {/* Hero Section */}
+      <div style={{
+        position: "relative",
+        height: "400px",
+        width: "100%",
+        backgroundImage: "url('/images/lucena_market_hero.png')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "white",
+        textAlign: "center",
+        overflow: "hidden"
+      }}>
+        {/* Gradient Overlay for Branding */}
+        <div style={{
+          position: "absolute",
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: "linear-gradient(135deg, rgba(17, 41, 107, 0.85) 0%, rgba(255, 203, 5, 0.4) 100%)",
+          zIndex: 1
+        }}></div>
+        
+        <div style={{ position: "relative", zIndex: 2, padding: "0 var(--space-6)", maxWidth: "800px" }}>
+          <div style={{ 
+            display: "inline-block", 
+            background: "rgba(255, 203, 5, 0.2)", 
+            backdropFilter: "blur(4px)", 
+            padding: "6px 16px", 
+            borderRadius: "var(--radius-full)", 
+            border: "1px solid rgba(255, 203, 5, 0.5)",
+            color: "var(--color-primary)", 
+            fontWeight: 800, 
+            fontSize: "12px", 
+            textTransform: "uppercase", 
+            letterSpacing: "1px",
+            marginBottom: "var(--space-4)"
+          }}>
+            Welcome to Lucena Public Market
+          </div>
+          <h1 style={{ color: "white", fontSize: "clamp(32px, 5vw, 56px)", fontWeight: 900, lineHeight: 1.1, marginBottom: "var(--space-4)", letterSpacing: "-1px", textShadow: "0 2px 10px rgba(0,0,0,0.3)" }}>
+            Freshness You Can Trust,<br/>Prices You Can Verify.
+          </h1>
+          <p style={{ color: "white", fontSize: "clamp(16px, 2vw, 20px)", opacity: 0.9, marginBottom: "var(--space-6)", fontWeight: 500, textShadow: "0 1px 4px rgba(0,0,0,0.2)" }}>
+            Explore today's best deals, navigate stalls instantly, and ensure fair pricing.
+          </p>
+          
+          <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
+            <button 
+              onClick={() => document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth' })}
+              style={{ background: "var(--color-primary)", color: "var(--color-accent)", padding: "14px 28px", borderRadius: "var(--radius-full)", fontWeight: 800, fontSize: "16px", transition: "transform 0.2s, box-shadow 0.2s", boxShadow: "0 4px 15px rgba(255, 203, 5, 0.4)" }}
+              onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+              onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}
+            >
+              Shop Today's Deals
+            </button>
+            <button 
+              onClick={() => document.getElementById('market-navigator')?.scrollIntoView({ behavior: 'smooth' })}
+              style={{ background: "rgba(255,255,255,0.1)", backdropFilter: "blur(8px)", color: "white", border: "1px solid rgba(255,255,255,0.3)", padding: "14px 28px", borderRadius: "var(--radius-full)", fontWeight: 800, fontSize: "16px", transition: "background 0.2s" }}
+              onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
+              onMouseOut={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+            >
+              Open Market Map
+            </button>
+          </div>
+        </div>
+      </div>
+
       <main style={{ maxWidth: 1400, margin: "0 auto", padding: "var(--space-8) var(--space-6)" }}>
         
-        {/* Section 4: Lucena Price Fairness Index™ & Best Deals */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 350px), 1fr))", gap: "var(--space-6)", marginBottom: "var(--space-8)" }}>
-          
-          <div className="card" style={{ padding: "var(--space-6)", background: "linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)", border: "1px solid #E2E8F0", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)" }}>
-            <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", fontWeight: 800, color: "var(--text-muted)", letterSpacing: "1px", marginBottom: "var(--space-4)" }}>
-              Signature Metric
-            </div>
-            <div style={{ marginBottom: "var(--space-2)" }}>
-              <span style={{ fontSize: "64px", fontWeight: 900, color: "var(--color-accent)", lineHeight: 1, letterSpacing: "-2px" }}>87</span>
-              <span style={{ fontSize: "var(--text-xl)", color: "var(--text-muted)", fontWeight: 700 }}>/100</span>
-            </div>
-            <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "#16A34A", margin: "0 0 var(--space-1) 0" }}>Fair Market Pricing</h2>
-            <p style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
-              Lucena Prices Index™ indicates generally affordable staple goods and stable protein prices compared to the regional average, despite some volatility in vegetables.
-            </p>
-          </div>
-
-          <div className="card" style={{ padding: "var(--space-6)" }}>
-            <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "var(--color-accent)", margin: "0 0 var(--space-4) 0", display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <Star size={18} color="var(--color-primary)" fill="var(--color-primary)" /> Best Deals Today (Lucena Rank)
-            </h2>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "var(--space-4)" }}>
-              <div style={{ padding: "var(--space-4)", background: "#F0FDF4", borderRadius: "var(--radius-md)", borderLeft: "4px solid #16A34A" }}>
-                <div style={{ fontSize: "var(--text-xs)", color: "#166534", fontWeight: 700, textTransform: "uppercase" }}>🏆 #1 Cheapest</div>
-                <div style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: "#166534", marginTop: 4 }}>Tilapia</div>
-                <div style={{ fontSize: "var(--text-sm)", color: "#15803D", marginTop: 2 }}>in the Region</div>
-              </div>
-              <div style={{ padding: "var(--space-4)", background: "#EFF6FF", borderRadius: "var(--radius-md)", borderLeft: "4px solid #2563EB" }}>
-                <div style={{ fontSize: "var(--text-xs)", color: "#1E3A8A", fontWeight: 700, textTransform: "uppercase" }}>🏆 #2 Cheapest</div>
-                <div style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: "#1E3A8A", marginTop: 4 }}>Garlic</div>
-                <div style={{ fontSize: "var(--text-sm)", color: "#1D4ED8", marginTop: 2 }}>in the Region</div>
-              </div>
-              <div style={{ padding: "var(--space-4)", background: "#FDF4FF", borderRadius: "var(--radius-md)", borderLeft: "4px solid #C026D3" }}>
-                <div style={{ fontSize: "var(--text-xs)", color: "#86198F", fontWeight: 700, textTransform: "uppercase" }}>🏆 #3 Cheapest</div>
-                <div style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: "#86198F", marginTop: 4 }}>Rice</div>
-                <div style={{ fontSize: "var(--text-sm)", color: "#A21CAF", marginTop: 2 }}>in the Region</div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        {/* NEW SECTION: What Changed This Week? */}
-        <div style={{ marginBottom: "var(--space-10)" }}>
-          <h2 style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: "var(--color-accent)", margin: "0 0 var(--space-4) 0", display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-            <Activity size={20} color="var(--color-primary)" /> What Changed This Week?
-          </h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "var(--space-4)" }}>
-            {(() => {
-              if (!staples.length) return null;
-              const increases = staples.filter(s => s.weeklyChange > 0).sort((a, b) => b.weeklyChange - a.weeklyChange);
-              const decreases = staples.filter(s => s.weeklyChange < 0).sort((a, b) => a.weeklyChange - b.weeklyChange);
-              
-              const biggestIncrease = increases.length > 0 ? increases[0] : null;
-              const biggestDecrease = decreases.length > 0 ? decreases[0] : null;
-              
-              const sortedByVolatility = [...staples].filter(s => Math.abs(s.weeklyChange) > 0).sort((a, b) => Math.abs(b.weeklyChange) - Math.abs(a.weeklyChange));
-              const mostVolatile = sortedByVolatility.length > 0 ? sortedByVolatility[0] : null;
-              
-              const sortedByStability = [...staples].sort((a, b) => Math.abs(a.weeklyChange) - Math.abs(b.weeklyChange));
-              const mostStable = sortedByStability[0];
-
-              const formatName = (item: any) => {
-                if (!item || !item.name) return '';
-                if (!item.category) return item.name;
-                
-                const catLower = item.category.toLowerCase();
-                if (catLower.includes('imported commercial rice')) return `${item.name} (Imported Rice)`;
-                if (catLower.includes('local commercial rice')) return `${item.name} (Local Rice)`;
-                return item.name;
-              };
-
-              return (
-                <>
-                  <div style={{ padding: "var(--space-4)", background: "white", borderRadius: "var(--radius-md)", border: "1px solid #E5E7EB", display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#FEE2E2", color: "#DC2626", display: "flex", alignItems: "center", justifyContent: "center" }}><TrendingUp size={20} /></div>
-                    <div>
-                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase" }}>Biggest Increase</div>
-                      <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>{biggestIncrease ? `${formatName(biggestIncrease)} (+${biggestIncrease.weeklyChange}%)` : 'No increases'}</div>
-                    </div>
-                  </div>
-                  <div style={{ padding: "var(--space-4)", background: "white", borderRadius: "var(--radius-md)", border: "1px solid #E5E7EB", display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#DCFCE7", color: "#16A34A", display: "flex", alignItems: "center", justifyContent: "center" }}><TrendingDown size={20} /></div>
-                    <div>
-                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase" }}>Biggest Decrease</div>
-                      <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>{biggestDecrease ? `${formatName(biggestDecrease)} (${biggestDecrease.weeklyChange}%)` : 'No decreases'}</div>
-                    </div>
-                  </div>
-                  <div style={{ padding: "var(--space-4)", background: "white", borderRadius: "var(--radius-md)", border: "1px solid #E5E7EB", display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#F3F4F6", color: "#4B5563", display: "flex", alignItems: "center", justifyContent: "center" }}><Minus size={20} /></div>
-                    <div>
-                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase" }}>Most Stable</div>
-                      <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>{mostStable.weeklyChange === 0 ? `${formatName(mostStable)} (Unchanged)` : formatName(mostStable)}</div>
-                    </div>
-                  </div>
-                  <div style={{ padding: "var(--space-4)", background: "white", borderRadius: "var(--radius-md)", border: "1px solid #E5E7EB", display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#FEF3C7", color: "#D97706", display: "flex", alignItems: "center", justifyContent: "center" }}><Activity size={20} /></div>
-                    <div>
-                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase" }}>High Volatility</div>
-                      <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>{mostVolatile ? formatName(mostVolatile) : 'Stable Market'}</div>
-                    </div>
-                  </div>
-                </>
-              )
-            })()}
-          </div>
-        </div>
-
         {/* Section 1: Today's Lucena Market Snapshot */}
         <div style={{ marginBottom: "var(--space-10)" }}>
           <div style={{ marginBottom: "var(--space-4)" }}>
@@ -577,55 +537,63 @@ export default function LucenaDecisionSupport() {
               <span style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)", fontWeight: 600 }}>Live Affordability Indicators</span>
             </div>
             
-            {/* Category Filter Tabs */}
-            <div style={{ position: "relative", display: "flex", alignItems: "center", margin: "0 -8px", padding: "0 8px" }}>
+            {/* Visual Category Navigation */}
+            <div id="categories" style={{ position: "relative", display: "flex", alignItems: "center", margin: "0 -8px", padding: "0 8px", marginBottom: "var(--space-6)" }}>
               <button 
-                onClick={() => document.getElementById('category-scroll')?.scrollBy({ left: -200, behavior: 'smooth' })} 
-                style={{ position: "absolute", left: -8, zIndex: 10, background: "white", border: "1px solid #E5E7EB", borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}
+                onClick={() => document.getElementById('category-scroll')?.scrollBy({ left: -300, behavior: 'smooth' })} 
+                style={{ position: "absolute", left: -8, zIndex: 10, background: "white", border: "1px solid #E5E7EB", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
               >
-                <ChevronLeft size={16} color="var(--text-secondary)" />
+                <ChevronLeft size={20} color="var(--text-secondary)" />
               </button>
 
               <div id="category-scroll" className="category-scroll-container" style={{ 
                 display: "flex", 
-                gap: "var(--space-2)", 
+                gap: "var(--space-4)", 
                 padding: "8px 20px",
                 overflowX: "auto",
                 scrollbarWidth: "none",
                 WebkitOverflowScrolling: "touch",
-                maskImage: "linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)",
-                WebkitMaskImage: "-webkit-linear-gradient(left, transparent 0%, black 5%, black 95%, transparent 100%)",
                 width: "100%"
               }}>
                 <style>{`.category-scroll-container::-webkit-scrollbar { display: none; }`}</style>
-                {categories.map(cat => (
-                  <button 
-                    key={cat} 
-                    onClick={() => handleCategoryChange(cat)}
-                    style={{ 
-                      padding: "6px 14px", 
-                      background: activeCategory === cat ? "var(--color-primary)" : "#F1F5F9", 
-                      color: activeCategory === cat ? "var(--color-accent)" : "var(--text-secondary)", 
-                      border: "none", 
-                      borderRadius: "var(--radius-full)", 
-                      fontSize: "var(--text-xs)", 
-                      fontWeight: 800, 
-                      cursor: "pointer", 
-                      transition: "all 0.2s",
-                      whiteSpace: "nowrap",
-                      flexShrink: 0
-                    }}
-                  >
-                    {cat}
-                  </button>
-                ))}
+                {categories.map(cat => {
+                  let bgImage = "url('/images/lucena_market_hero.png')";
+                  if (cat.toLowerCase().includes('protein') || cat.toLowerCase().includes('meat') || cat.toLowerCase().includes('fish') || cat.toLowerCase().includes('pork')) bgImage = "url('/images/cat_protein.png')";
+                  else if (cat.toLowerCase().includes('vegetable')) bgImage = "url('/images/cat_vegetable.png')";
+                  else if (cat.toLowerCase().includes('staple') || cat.toLowerCase().includes('rice') || cat.toLowerCase().includes('corn') || cat.toLowerCase().includes('grain')) bgImage = "url('/images/cat_staple.png')";
+
+                  return (
+                    <button 
+                      key={cat} 
+                      onClick={() => handleCategoryChange(cat)}
+                      style={{ 
+                        position: "relative",
+                        width: "160px",
+                        height: "100px",
+                        borderRadius: "var(--radius-lg)",
+                        overflow: "hidden",
+                        border: activeCategory === cat ? "3px solid var(--color-primary)" : "none",
+                        boxShadow: activeCategory === cat ? "0 4px 15px rgba(255, 203, 5, 0.4)" : "0 2px 8px rgba(0,0,0,0.1)",
+                        cursor: "pointer",
+                        flexShrink: 0,
+                        transition: "transform 0.2s, box-shadow 0.2s"
+                      }}
+                      onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                      onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}
+                    >
+                      <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundImage: bgImage, backgroundSize: "cover", backgroundPosition: "center", filter: activeCategory === cat ? "brightness(0.9)" : "brightness(0.6)", transition: "filter 0.2s" }}></div>
+                      <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: activeCategory === cat ? "linear-gradient(to top, rgba(17, 41, 107, 0.9), transparent)" : "linear-gradient(to top, rgba(0,0,0,0.8), transparent)" }}></div>
+                      <span style={{ position: "absolute", bottom: "12px", left: "12px", color: "white", fontWeight: 800, fontSize: "16px", textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>{cat}</span>
+                    </button>
+                  );
+                })}
               </div>
 
               <button 
-                onClick={() => document.getElementById('category-scroll')?.scrollBy({ left: 200, behavior: 'smooth' })} 
-                style={{ position: "absolute", right: -8, zIndex: 10, background: "white", border: "1px solid #E5E7EB", borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}
+                onClick={() => document.getElementById('category-scroll')?.scrollBy({ left: 300, behavior: 'smooth' })} 
+                style={{ position: "absolute", right: -8, zIndex: 10, background: "white", border: "1px solid #E5E7EB", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
               >
-                <ChevronRight size={16} color="var(--text-secondary)" />
+                <ChevronRight size={20} color="var(--text-secondary)" />
               </button>
             </div>
           </div>
@@ -910,7 +878,115 @@ export default function LucenaDecisionSupport() {
           {/* Left Column */}
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-8)" }}>
             
-            {/* Section 2: Smart Ulam Calculator */}
+            {/* Section 4: Lucena Price Fairness Index™ & Best Deals */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 350px), 1fr))", gap: "var(--space-6)", marginBottom: "var(--space-8)" }}>
+          
+          <div className="card" style={{ padding: "var(--space-6)", background: "linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)", border: "1px solid #E2E8F0", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)" }}>
+            <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", fontWeight: 800, color: "var(--text-muted)", letterSpacing: "1px", marginBottom: "var(--space-4)" }}>
+              Signature Metric
+            </div>
+            <div style={{ marginBottom: "var(--space-2)" }}>
+              <span style={{ fontSize: "64px", fontWeight: 900, color: "var(--color-accent)", lineHeight: 1, letterSpacing: "-2px" }}>87</span>
+              <span style={{ fontSize: "var(--text-xl)", color: "var(--text-muted)", fontWeight: 700 }}>/100</span>
+            </div>
+            <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "#16A34A", margin: "0 0 var(--space-1) 0" }}>Fair Market Pricing</h2>
+            <p style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
+              Lucena Prices Index™ indicates generally affordable staple goods and stable protein prices compared to the regional average, despite some volatility in vegetables.
+            </p>
+          </div>
+
+          <div className="card" style={{ padding: "var(--space-6)" }}>
+            <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "var(--color-accent)", margin: "0 0 var(--space-4) 0", display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+              <Star size={18} color="var(--color-primary)" fill="var(--color-primary)" /> Best Deals Today (Lucena Rank)
+            </h2>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "var(--space-4)" }}>
+              <div style={{ padding: "var(--space-4)", background: "#F0FDF4", borderRadius: "var(--radius-md)", borderLeft: "4px solid #16A34A" }}>
+                <div style={{ fontSize: "var(--text-xs)", color: "#166534", fontWeight: 700, textTransform: "uppercase" }}>🏆 #1 Cheapest</div>
+                <div style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: "#166534", marginTop: 4 }}>Tilapia</div>
+                <div style={{ fontSize: "var(--text-sm)", color: "#15803D", marginTop: 2 }}>in the Region</div>
+              </div>
+              <div style={{ padding: "var(--space-4)", background: "#EFF6FF", borderRadius: "var(--radius-md)", borderLeft: "4px solid #2563EB" }}>
+                <div style={{ fontSize: "var(--text-xs)", color: "#1E3A8A", fontWeight: 700, textTransform: "uppercase" }}>🏆 #2 Cheapest</div>
+                <div style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: "#1E3A8A", marginTop: 4 }}>Garlic</div>
+                <div style={{ fontSize: "var(--text-sm)", color: "#1D4ED8", marginTop: 2 }}>in the Region</div>
+              </div>
+              <div style={{ padding: "var(--space-4)", background: "#FDF4FF", borderRadius: "var(--radius-md)", borderLeft: "4px solid #C026D3" }}>
+                <div style={{ fontSize: "var(--text-xs)", color: "#86198F", fontWeight: 700, textTransform: "uppercase" }}>🏆 #3 Cheapest</div>
+                <div style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: "#86198F", marginTop: 4 }}>Rice</div>
+                <div style={{ fontSize: "var(--text-sm)", color: "#A21CAF", marginTop: 2 }}>in the Region</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        {/* NEW SECTION: What Changed This Week? */}
+        <div style={{ marginBottom: "var(--space-10)" }}>
+          <h2 style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: "var(--color-accent)", margin: "0 0 var(--space-4) 0", display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+            <Activity size={20} color="var(--color-primary)" /> What Changed This Week?
+          </h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "var(--space-4)" }}>
+            {(() => {
+              if (!staples.length) return null;
+              const increases = staples.filter(s => s.weeklyChange > 0).sort((a, b) => b.weeklyChange - a.weeklyChange);
+              const decreases = staples.filter(s => s.weeklyChange < 0).sort((a, b) => a.weeklyChange - b.weeklyChange);
+              
+              const biggestIncrease = increases.length > 0 ? increases[0] : null;
+              const biggestDecrease = decreases.length > 0 ? decreases[0] : null;
+              
+              const sortedByVolatility = [...staples].filter(s => Math.abs(s.weeklyChange) > 0).sort((a, b) => Math.abs(b.weeklyChange) - Math.abs(a.weeklyChange));
+              const mostVolatile = sortedByVolatility.length > 0 ? sortedByVolatility[0] : null;
+              
+              const sortedByStability = [...staples].sort((a, b) => Math.abs(a.weeklyChange) - Math.abs(b.weeklyChange));
+              const mostStable = sortedByStability[0];
+
+              const formatName = (item: any) => {
+                if (!item || !item.name) return '';
+                if (!item.category) return item.name;
+                
+                const catLower = item.category.toLowerCase();
+                if (catLower.includes('imported commercial rice')) return `${item.name} (Imported Rice)`;
+                if (catLower.includes('local commercial rice')) return `${item.name} (Local Rice)`;
+                return item.name;
+              };
+
+              return (
+                <>
+                  <div style={{ padding: "var(--space-4)", background: "white", borderRadius: "var(--radius-md)", border: "1px solid #E5E7EB", display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#FEE2E2", color: "#DC2626", display: "flex", alignItems: "center", justifyContent: "center" }}><TrendingUp size={20} /></div>
+                    <div>
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase" }}>Biggest Increase</div>
+                      <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>{biggestIncrease ? `${formatName(biggestIncrease)} (+${biggestIncrease.weeklyChange}%)` : 'No increases'}</div>
+                    </div>
+                  </div>
+                  <div style={{ padding: "var(--space-4)", background: "white", borderRadius: "var(--radius-md)", border: "1px solid #E5E7EB", display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#DCFCE7", color: "#16A34A", display: "flex", alignItems: "center", justifyContent: "center" }}><TrendingDown size={20} /></div>
+                    <div>
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase" }}>Biggest Decrease</div>
+                      <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>{biggestDecrease ? `${formatName(biggestDecrease)} (${biggestDecrease.weeklyChange}%)` : 'No decreases'}</div>
+                    </div>
+                  </div>
+                  <div style={{ padding: "var(--space-4)", background: "white", borderRadius: "var(--radius-md)", border: "1px solid #E5E7EB", display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#F3F4F6", color: "#4B5563", display: "flex", alignItems: "center", justifyContent: "center" }}><Minus size={20} /></div>
+                    <div>
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase" }}>Most Stable</div>
+                      <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>{mostStable.weeklyChange === 0 ? `${formatName(mostStable)} (Unchanged)` : formatName(mostStable)}</div>
+                    </div>
+                  </div>
+                  <div style={{ padding: "var(--space-4)", background: "white", borderRadius: "var(--radius-md)", border: "1px solid #E5E7EB", display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#FEF3C7", color: "#D97706", display: "flex", alignItems: "center", justifyContent: "center" }}><Activity size={20} /></div>
+                    <div>
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase" }}>High Volatility</div>
+                      <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>{mostVolatile ? formatName(mostVolatile) : 'Stable Market'}</div>
+                    </div>
+                  </div>
+                </>
+              )
+            })()}
+          </div>
+        </div>
+
+        {/* Section 2: Smart Ulam Calculator */}
             <div className="card" style={{ border: "1px solid var(--color-primary)" }}>
               <div className="card-header" style={{ background: "var(--color-primary-pale)", borderBottom: "1px solid #FDE047", padding: "var(--space-4) var(--space-5)" }}>
                 <h3 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "var(--color-accent)", margin: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" }}><ChefHat size={18} /> Smart Ulam Calculator</h3>
