@@ -2,7 +2,7 @@
 
 import AppShell from "@/components/layout/AppShell";
 import { useState, useEffect, useCallback } from "react";
-import { Download, FileText, BarChart2, Filter, Printer, CheckCircle } from "lucide-react";
+import { Download, FileText, BarChart2, Filter, Printer, CheckCircle, Sparkles } from "lucide-react";
 import {
   BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
@@ -86,6 +86,53 @@ export default function ReportsPage() {
     month: t.month,
     total: t.count,
   }));
+
+  const getPieInsight = () => {
+    if (!reportData) return null;
+    const rate = reportData.occupancy.rate;
+    if (rate >= 90) return `Outstanding occupancy with ${rate}% of stalls occupied.`;
+    if (rate < 60) return `Low occupancy (${rate}%). High vacancy rate detected.`;
+    return `Occupancy is stable at ${rate}%.`;
+  };
+
+  const getBarInsight = () => {
+    if (!reportData?.section_report || reportData.section_report.length === 0) return null;
+    const sorted = [...reportData.section_report].sort((a, b) => b.occupancy_rate - a.occupancy_rate);
+    const highest = sorted[0];
+    const lowest = sorted[sorted.length - 1];
+    if (highest && lowest && highest.occupancy_rate - lowest.occupancy_rate > 30) {
+      return `Significant disparity: Section ${highest.code} is heavily utilized (${highest.occupancy_rate}%), while Section ${lowest.code} lags behind (${lowest.occupancy_rate}%).`;
+    } else if (highest) {
+      return `Section ${highest.code} has the highest occupancy rate at ${highest.occupancy_rate}%.`;
+    }
+    return null;
+  };
+
+  const getTrendInsight = () => {
+    if (!reportData?.complaint_trend || reportData.complaint_trend.length < 2) return null;
+    const current = reportData.complaint_trend[reportData.complaint_trend.length - 1].count;
+    const previous = reportData.complaint_trend[reportData.complaint_trend.length - 2].count;
+    if (current > previous) {
+      return `Complaints have increased from ${previous} to ${current} in the latest month.`;
+    } else if (current < previous) {
+      return `Complaints have decreased from ${previous} to ${current} in the latest month. Great progress!`;
+    }
+    return `Complaints are stable compared to the previous month.`;
+  };
+
+  const getComplianceInsight = () => {
+    if (!reportData?.vendor_compliance) return null;
+    const below70 = reportData.vendor_compliance.below_70;
+    if (below70 > 0) {
+      return `Action required: ${below70} vendor(s) are below the 70% compliance threshold.`;
+    }
+    return `All vendors are meeting the minimum compliance threshold.`;
+  };
+
+  const pieInsight = getPieInsight();
+  const barInsight = getBarInsight();
+  const trendInsight = getTrendInsight();
+  const complianceInsight = getComplianceInsight();
 
   return (
     <AppShell pageTitle="Reports & Analytics" role="admin" userName={user?.first_name || "Admin"} userRole="Administrator">
@@ -225,6 +272,14 @@ export default function ReportsPage() {
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
+                {pieInsight && (
+                  <div style={{ marginTop: "16px", padding: "12px", background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: "8px", display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                    <Sparkles size={16} color="#7C3AED" style={{ flexShrink: 0, marginTop: "2px" }} />
+                    <span style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.4" }}>
+                      <strong>Insight:</strong> {pieInsight}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -247,6 +302,14 @@ export default function ReportsPage() {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
+                {barInsight && (
+                  <div style={{ marginTop: "16px", padding: "12px", background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: "8px", display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                    <Sparkles size={16} color="#7C3AED" style={{ flexShrink: 0, marginTop: "2px" }} />
+                    <span style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.4" }}>
+                      <strong>Insight:</strong> {barInsight}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -271,6 +334,14 @@ export default function ReportsPage() {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+              {trendInsight && (
+                <div style={{ marginTop: "16px", padding: "12px", background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: "8px", display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                  <Sparkles size={16} color="#7C3AED" style={{ flexShrink: 0, marginTop: "2px" }} />
+                  <span style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.4" }}>
+                    <strong>Insight:</strong> {trendInsight}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -344,6 +415,14 @@ export default function ReportsPage() {
                   <div style={{fontSize:"var(--text-xs)",color:"var(--text-secondary)"}}>Vendors Below 70%</div>
                 </div>
               </div>
+              {complianceInsight && (
+                <div style={{ marginTop: "16px", padding: "12px", background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: "8px", display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                  <Sparkles size={16} color="#7C3AED" style={{ flexShrink: 0, marginTop: "2px" }} />
+                  <span style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.4" }}>
+                    <strong>Insight:</strong> {complianceInsight}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </>

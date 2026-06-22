@@ -13,7 +13,7 @@ export default function ViolationsPage() {
   const [vendors, setVendors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newViolation, setNewViolation] = useState({ vendor: "", violation_type: "Sanitation", severity: "minor", description: "" });
+  const [newViolation, setNewViolation] = useState({ vendor: "", violation_type: "Sanitation", severity: "low", description: "" });
   const [submitting, setSubmitting] = useState(false);
 
   const fetchData = useCallback(() => {
@@ -37,10 +37,11 @@ export default function ViolationsPage() {
     if (!newViolation.vendor || !newViolation.description) return;
     setSubmitting(true);
     try {
-      await violationsApi.create(newViolation);
+      const payload = { ...newViolation, violation_date: new Date().toISOString().split('T')[0] };
+      await violationsApi.create(payload);
       fetchData();
       setIsModalOpen(false);
-      setNewViolation({ vendor: "", violation_type: "Sanitation", severity: "minor", description: "" });
+      setNewViolation({ vendor: "", violation_type: "Sanitation", severity: "low", description: "" });
     } catch (err) {
       alert("Failed to submit violation");
     } finally {
@@ -135,8 +136,9 @@ export default function ViolationsPage() {
           <div className="form-group">
             <label className="form-label">Severity</label>
             <select className="form-select" value={newViolation.severity} onChange={e => setNewViolation({...newViolation, severity: e.target.value})}>
-              <option value="minor">Minor</option>
-              <option value="major">Major</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
               <option value="critical">Critical</option>
             </select>
           </div>

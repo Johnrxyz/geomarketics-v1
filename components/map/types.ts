@@ -181,6 +181,7 @@ export const COMBINED_BRIDGE_GAP = 200;
 // Used as a fallback until the backend migrates to occupancy_status + compliance_status.
 
 export const LEGACY_TO_OCCUPANCY: Record<string, OccupancyStatus> = {
+  // Legacy mappings
   occupied:    'owner',
   owner:       'owner',
   rented:      'rented',
@@ -190,6 +191,9 @@ export const LEGACY_TO_OCCUPANCY: Record<string, OccupancyStatus> = {
   reserved:    'vacant',
   closed:      'closed',
   flagged:     'closed',
+  // Identity mappings (if backend sends the exact new value)
+  surrendered_bolante: 'surrendered_bolante',
+  surrendered_vacant: 'surrendered_vacant',
 };
 
 export const LEGACY_TO_COMPLIANCE: Record<string, ComplianceStatus | null> = {

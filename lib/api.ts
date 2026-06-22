@@ -385,6 +385,11 @@ export const notificationsApi = {
     return json(res);
   },
 
+  async markRead(id: number | string) {
+    const res = await apiFetch(`/notifications/${id}/mark-read/`, { method: 'POST' });
+    return json(res);
+  },
+
   async markAllRead() {
     const res = await apiFetch('/notifications/mark-all-read/', { method: 'POST' });
     return json(res);
