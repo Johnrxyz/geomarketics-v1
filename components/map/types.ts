@@ -11,8 +11,14 @@ export type FloorId = '1' | '2';
 // Occupancy and Compliance are INDEPENDENT fields.
 // A stall can be occupied AND high_risk simultaneously.
 
-/** Whether the physical stall space is in use */
-export type OccupancyStatus = 'occupied' | 'vacant' | 'reserved' | 'maintenance';
+/** Stall occupancy/usage status — matches the client's actual categories */
+export type OccupancyStatus =
+  | 'owner'
+  | 'rented'
+  | 'storage'
+  | 'surrendered_bolante'
+  | 'vacant'
+  | 'closed';
 
 /** The vendor's regulatory/compliance standing. null = no vendor (vacant/maintenance) */
 export type ComplianceStatus = 'compliant' | 'warning' | 'high_risk';
@@ -25,6 +31,7 @@ export interface MarketStall {
   section: string;
   vendor: string;
   category: string;
+  area_sqm?: number | null;
 
   /** Physical occupancy of the stall space */
   occupancy_status: OccupancyStatus;
@@ -40,6 +47,9 @@ export interface MarketStall {
 
   /** Optional JSON polygon data for precise stall boundary overlay */
   polygon_data?: string;
+
+  /** draw.io data-cell-id from the SVG floor plan */
+  svg_cell_id?: string;
 
   building: BuildingId;
   floor: FloorId;
@@ -101,10 +111,12 @@ export const MAP_LAYERS: MapLayer[] = [
 export const OCCUPANCY_CONFIG: Record<OccupancyStatus, {
   label: string; color: string; border: string; text: string; dot: string;
 }> = {
-  occupied:    { label: 'Occupied',    color: '#6B7280', border: '#4B5563', text: '#FFFFFF', dot: '#9CA3AF' },
-  vacant:      { label: 'Vacant',      color: '#3B82F6', border: '#1D4ED8', text: '#FFFFFF', dot: '#60A5FA' },
-  reserved:    { label: 'Reserved',    color: '#F59E0B', border: '#D97706', text: '#FFFFFF', dot: '#FCD34D' },
-  maintenance: { label: 'Maintenance', color: '#8B5CF6', border: '#7C3AED', text: '#FFFFFF', dot: '#A78BFA' },
+  closed:               { label: 'Closed / No Operation',   color: '#8B5CF6', border: '#7C3AED', text: '#FFFFFF', dot: '#A78BFA' },
+  rented:               { label: 'With Renter',             color: '#F97316', border: '#EA580C', text: '#FFFFFF', dot: '#FB923C' },
+  storage:              { label: 'Bodega',                  color: '#84CC16', border: '#65A30D', text: '#FFFFFF', dot: '#A3E635' },
+  surrendered_bolante:  { label: 'Surrendered w/ Bolante',  color: '#FBBF24', border: '#D97706', text: '#000000', dot: '#FCD34D' },
+  vacant:               { label: 'Surrendered / Vacant',    color: '#38BDF8', border: '#0284C7', text: '#FFFFFF', dot: '#7DD3FC' },
+  owner:                { label: 'Managed by the Owner',    color: '#FFFFFF', border: '#374151', text: '#000000', dot: '#E5E7EB' },
 };
 
 export const COMPLIANCE_CONFIG: Record<ComplianceStatus, {
@@ -145,8 +157,8 @@ export const MAP_CONFIGS: Record<BuildingId, Record<FloorId, MapConfig>> = {
     '2': { src: '/MAIN_Second_Floor.svg',  width: 4709, height: 2947, label: 'Main Building — 2nd Floor' },
   },
   annex: {
-    '1': { src: '/ANNEX_First_Floor.svg',  width: 3165, height: 898,  label: 'Annex — 1st Floor' },
-    '2': { src: '/ANNEX_Second_Floor.svg', width: 2769, height: 898,  label: 'Annex — 2nd Floor' },
+    '1': { src: '/ANNEX_First_Floor.svg',  width: 4281, height: 1176, label: 'Annex — 1st Floor' },
+    '2': { src: '/ANNEX_Second_Floor.svg', width: 4258, height: 1339, label: 'Annex — 2nd Floor' },
   },
   // Combined view uses the Main config dimensions — Annex is rendered separately below
   combined: {
@@ -157,8 +169,8 @@ export const MAP_CONFIGS: Record<BuildingId, Record<FloorId, MapConfig>> = {
 
 /** Annex configs — used only in combined (unified floor) view */
 export const ANNEX_CONFIGS: Record<FloorId, MapConfig> = {
-  '1': { src: '/ANNEX_First_Floor.svg',  width: 3165, height: 898,  label: 'Annex — 1st Floor' },
-  '2': { src: '/ANNEX_Second_Floor.svg', width: 2769, height: 898,  label: 'Annex — 2nd Floor' },
+  '1': { src: '/ANNEX_First_Floor.svg',  width: 4281, height: 1176, label: 'Annex — 1st Floor' },
+  '2': { src: '/ANNEX_Second_Floor.svg', width: 4258, height: 1339, label: 'Annex — 2nd Floor' },
 };
 
 /** Vertical gap (px in SVG space) between Main and Annex in the combined view */
@@ -169,25 +181,25 @@ export const COMBINED_BRIDGE_GAP = 200;
 // Used as a fallback until the backend migrates to occupancy_status + compliance_status.
 
 export const LEGACY_TO_OCCUPANCY: Record<string, OccupancyStatus> = {
-  occupied:    'occupied',
-  flagged:     'occupied',
-  closed:      'maintenance',
+  occupied:    'owner',
+  owner:       'owner',
+  rented:      'rented',
+  storage:     'storage',
+  ambulant:    'surrendered_bolante',
   vacant:      'vacant',
-  reserved:    'reserved',
-  storage:     'occupied',
-  ambulant:    'occupied',
-  rented:      'occupied',
-  owner:       'occupied',
+  reserved:    'vacant',
+  closed:      'closed',
+  flagged:     'closed',
 };
 
 export const LEGACY_TO_COMPLIANCE: Record<string, ComplianceStatus | null> = {
   occupied:    'compliant',
-  flagged:     'high_risk',
-  closed:      null,
-  vacant:      null,
-  reserved:    null,
+  owner:       'compliant',
+  rented:      'compliant',
   storage:     'warning',
   ambulant:    'warning',
-  rented:      'compliant',
-  owner:       'compliant',
+  vacant:      null,
+  reserved:    null,
+  closed:      null,
+  flagged:     'high_risk',
 };

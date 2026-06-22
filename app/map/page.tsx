@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import AppShell from "@/components/layout/AppShell";
 import { Search, ChevronRight, ChevronUp, ChevronDown, SlidersHorizontal, List, X } from "lucide-react";
@@ -17,11 +17,11 @@ import { stallsApi } from "@/lib/api";
 import { useAuthGuard } from "@/lib/useAuthGuard";
 
 const CATEGORIES = ["All", "Vegetables", "Meat", "Fish", "Dry Goods", "Cooked Food", "Fruits"];
-const OCCUPANCY_STATUSES: ("All" | OccupancyStatus)[] = ["All", "occupied", "vacant", "reserved", "maintenance"];
+const OCCUPANCY_STATUSES: ("All" | OccupancyStatus)[] = ["All", "owner", "rented", "storage", "surrendered_bolante", "vacant", "closed"];
 
 
 
-export default function MapPage() {
+function MapContent() {
   const { ready, user: authUser } = useAuthGuard();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -35,25 +35,21 @@ export default function MapPage() {
   const [statusFilter, setStatusFilter] = useState<"All" | OccupancyStatus>("All");
   const [activeLayer, setActiveLayer] = useState<MapLayerId>("stall_status");
 
-  // URL-synced building + floor
-  const activeBuilding = (searchParams.get("building") ?? "main") as BuildingId;
+  // URL-synced floor only (unified view shows both buildings at once)
   const activeFloor = (searchParams.get("floor") ?? "1") as FloorId;
 
-  const handleBuildingFloorChange = (building: BuildingId, floor: FloorId) => {
+  const handleBuildingFloorChange = (_building: BuildingId, floor: FloorId) => {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("building", building);
     params.set("floor", floor);
     router.push(`/map?${params.toString()}`, { scroll: false });
   };
 
-  // Mobile bottom drawer
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<"filters" | "directory">("directory");
   const [isMobile, setIsMobile] = useState(false);
 
   const role = authUser?.role === "admin" ? "admin" : "vendor";
 
-  // Detect viewport
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth <= 768);
     check();
@@ -64,13 +60,12 @@ export default function MapPage() {
   const fetchStalls = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await stallsApi.list({ page_size: "200" }) as { results: Record<string, unknown>[] };
+      const data = await stallsApi.list({ page_size: "1000" }) as { results: Record<string, unknown>[] };
       const items = (data.results || []) as Record<string, unknown>[];
 
-      // Fallback grid layout for stalls without SVG coordinates
       const STALL_W = 200;
       const STALL_H = 120;
-      const COLS    = 12;
+      const COLS = 12;
       const SEC_PAD = 400;
       const sectionIndex: Record<string, number> = {};
       const sectionCounter: Record<string, number> = {};
@@ -112,6 +107,8 @@ export default function MapPage() {
           svg_x,
           svg_y,
           polygon_data: (s.polygon_data as string | undefined),
+          svg_cell_id: (s.svg_cell_id as string) || "",
+          area_sqm: (s.area_sqm as number | null) ?? null,
           building: (s.building as BuildingId) ?? "main",
           floor: (s.floor as FloorId) ?? "1",
         };
@@ -136,8 +133,8 @@ export default function MapPage() {
       (s.category ?? "").toLowerCase().includes(search.toLowerCase());
     const matchCat = categoryFilter === "All" || s.category === categoryFilter;
     const matchStatus = statusFilter === "All" || s.occupancy_status === statusFilter;
-    // Only show stalls for the currently active building/floor
-    const matchFloor = s.building === activeBuilding && s.floor === activeFloor;
+    // Unified view: show stalls from both buildings on the active floor
+    const matchFloor = s.floor === activeFloor;
     return matchSearch && matchCat && matchStatus && matchFloor;
   });
 
@@ -206,24 +203,25 @@ export default function MapPage() {
   const LegendGrid = () => {
     const entries = getLegendEntries(activeLayer);
     return (
-    <div style={{
-      display: "grid", gridTemplateColumns: "1fr 1fr",
-      gap: "var(--space-2) var(--space-3)",
-      padding: "16px 20px",
-    }}>
-      {entries.map((conf) => (
-        <div key={conf.key} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <div style={{
-            width: 14, height: 14, borderRadius: conf.shape === "ring" ? "50%" : 4, flexShrink: 0,
-            background: conf.color, border: `2px solid ${conf.border}`,
-          }} />
-          <span style={{ fontSize: "11px", fontWeight: 500, color: "var(--text-secondary)", lineHeight: 1.2 }}>
-            {conf.label}
-          </span>
-        </div>
-      ))}
-    </div>
-  )};
+      <div style={{
+        display: "grid", gridTemplateColumns: "1fr 1fr",
+        gap: "var(--space-2) var(--space-3)",
+        padding: "16px 20px",
+      }}>
+        {entries.map((conf) => (
+          <div key={conf.key} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{
+              width: 14, height: 14, borderRadius: conf.shape === "ring" ? "50%" : 4, flexShrink: 0,
+              background: conf.color, border: `2px solid ${conf.border}`,
+            }} />
+            <span style={{ fontSize: "11px", fontWeight: 500, color: "var(--text-secondary)", lineHeight: 1.2 }}>
+              {conf.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    )
+  };
 
   const glassStyle = {
     background: "rgba(255, 255, 255, 0.88)",
@@ -253,12 +251,12 @@ export default function MapPage() {
             showAdminLayers={role === "admin"}
             padding={mapPadding}
             focusTrigger={focusTrigger}
-            initialBuilding={activeBuilding}
             initialFloor={activeFloor}
             onBuildingFloorChange={handleBuildingFloorChange}
             activeLayerId={activeLayer}
             onLayerChange={setActiveLayer}
             hideFloatingControls={true}
+            unifiedFloorView={true}
           />
         </div>
 
@@ -281,7 +279,7 @@ export default function MapPage() {
         >
           {/* Search + Filters */}
           <div style={{ ...glassStyle, borderRadius: "18px", padding: "16px", pointerEvents: "auto" }}>
-            
+
             {/* Map Layers */}
             <div style={{ marginBottom: "16px" }}>
               <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "6px" }}>Map Layer</div>
@@ -540,5 +538,13 @@ export default function MapPage() {
 
       </div>
     </AppShell>
+  );
+}
+
+export default function MapPage() {
+  return (
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontFamily: 'inherit' }}>Loading map...</div>}>
+      <MapContent />
+    </Suspense>
   );
 }

@@ -59,7 +59,7 @@ export default function VendorManagementPage() {
   });
 
   const uniqueSections = ["All", ...Array.from(new Set(vendors.map(v => v.section)))];
-  const uniqueStatuses = ["All", "occupied", "vacant", "flagged", "reserved"];
+  const uniqueStatuses = ["All", "owner", "rented", "storage", "surrendered_bolante", "vacant", "closed"];
 
   return (
     <AppShell pageTitle="Vendor Management" role="admin" userName="Admin User" userRole="Administrator">

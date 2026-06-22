@@ -105,7 +105,7 @@ export default function LucenaDecisionSupport() {
   useEffect(() => {
     async function loadStalls() {
       try {
-        const data = await stallsApi.list({ page_size: "100" }) as any;
+        const data = await stallsApi.list({ page_size: "1000" }) as any;
         const items = data.results || data;
         setStallsList(items);
 
@@ -154,6 +154,8 @@ export default function LucenaDecisionSupport() {
             svg_x,
             svg_y,
             polygon_data: s.polygon_data ?? undefined,
+            svg_cell_id: (s.svg_cell_id as string) || "",
+            area_sqm: (s.area_sqm as number | null) ?? null,
             building: s.building ?? "main",
             floor: s.floor ?? "1",
           };

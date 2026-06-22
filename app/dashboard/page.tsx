@@ -5,7 +5,7 @@ import AppShell from "@/components/layout/AppShell";
 import StatCard from "@/components/ui/StatCard";
 import {
   Store, Users, AlertCircle, FileText, CheckCircle,
-  ArrowRight, Download, RefreshCw
+  ArrowRight, Download, RefreshCw, Lightbulb, TrendingUp, TrendingDown, Info, Sparkles
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -31,9 +31,9 @@ interface DashboardData {
 }
 
 const statusColorMap: Record<string, { label: string }> = {
-  open:      { label: "Open" },
+  open: { label: "Open" },
   reviewing: { label: "Reviewing" },
-  resolved:  { label: "Resolved" },
+  resolved: { label: "Resolved" },
   dismissed: { label: "Dismissed" },
 };
 
@@ -66,6 +66,66 @@ export default function DashboardPage() {
   // Show nothing while the auth check is in progress (avoids flash + API calls)
   if (!ready) return null;
 
+  const getInsights = () => {
+    if (!data) return [];
+    const newInsights = [];
+
+    if (stats) {
+      if (stats.occupancy_rate >= 90) {
+        newInsights.push({ type: 'success', title: 'High Occupancy', text: `Market occupancy is excellent at ${stats.occupancy_rate}%.`, icon: TrendingUp, color: '#16A34A', bg: '#DCFCE7' });
+      } else if (stats.occupancy_rate < 60) {
+        newInsights.push({ type: 'warning', title: 'Low Occupancy', text: `Market occupancy is low at ${stats.occupancy_rate}%. Consider vendor acquisition.`, icon: TrendingDown, color: '#DC2626', bg: '#FEE2E2' });
+      } else {
+        newInsights.push({ type: 'info', title: 'Stable Occupancy', text: `Market occupancy is stable at ${stats.occupancy_rate}%.`, icon: Info, color: '#2563EB', bg: '#EFF6FF' });
+      }
+    }
+
+    if (data.section_occupancy && data.section_occupancy.length > 0) {
+      const sorted = [...data.section_occupancy].sort((a, b) => b.occupancy_rate - a.occupancy_rate);
+      const highest = sorted[0];
+      const lowest = sorted[sorted.length - 1];
+      if (highest && lowest && highest.occupancy_rate - lowest.occupancy_rate > 30) {
+        newInsights.push({ type: 'warning', title: 'Occupancy Disparity', text: `Section ${highest.section} is heavily utilized (${highest.occupancy_rate}%), while Section ${lowest.section} lags behind (${lowest.occupancy_rate}%).`, icon: AlertCircle, color: '#F59E0B', bg: '#FEF3C7' });
+      }
+    }
+
+    if (data.complaints_by_category && data.complaints_by_category.length > 0) {
+      const top = [...data.complaints_by_category].sort((a, b) => b.count - a.count)[0];
+      if (top && top.count > 0) {
+        newInsights.push({ type: 'info', title: 'Complaint Trend', text: `"${top.category}" is the most common issue (${top.count} logs).`, icon: Lightbulb, color: '#7C3AED', bg: '#F3E8FF' });
+      }
+    }
+
+    return newInsights;
+  };
+
+  const insights = getInsights();
+
+  const getComplaintsInsight = () => {
+    if (!data?.complaints_by_category || data.complaints_by_category.length === 0) return null;
+    const top = [...data.complaints_by_category].sort((a, b) => b.count - a.count)[0];
+    if (top && top.count > 0) {
+      return `"${top.category}" is the most common issue with ${top.count} logs.`;
+    }
+    return null;
+  };
+
+  const getOccupancyInsight = () => {
+    if (!data?.section_occupancy || data.section_occupancy.length === 0) return null;
+    const sorted = [...data.section_occupancy].sort((a, b) => b.occupancy_rate - a.occupancy_rate);
+    const highest = sorted[0];
+    const lowest = sorted[sorted.length - 1];
+    if (highest && lowest && highest.occupancy_rate - lowest.occupancy_rate > 30) {
+      return `Section ${highest.section} is heavily utilized (${highest.occupancy_rate}%), while Section ${lowest.section} lags behind (${lowest.occupancy_rate}%).`;
+    } else if (highest) {
+      return `Section ${highest.section} currently leads occupancy with ${highest.occupancy_rate}%.`;
+    }
+    return null;
+  };
+
+  const complaintsInsight = getComplaintsInsight();
+  const occupancyInsight = getOccupancyInsight();
+
   return (
     <AppShell pageTitle="Dashboard" role="admin" userName={user?.first_name || "Admin"} userRole="Administrator">
       {/* Page header */}
@@ -75,31 +135,29 @@ export default function DashboardPage() {
           <p className="page-subtitle">LC Public Market · {loading ? "Loading..." : "Live data"}</p>
         </div>
         <div className="page-header-actions">
-          <button className="btn btn-ghost" style={{gap:"6px"}} onClick={fetchDashboard} disabled={loading}>
+          <button className="btn btn-ghost" style={{ gap: "6px" }} onClick={fetchDashboard} disabled={loading}>
             <RefreshCw size={15} /> Refresh
           </button>
-          <button className="btn btn-primary" style={{gap:"6px"}}>
+          <button className="btn btn-primary" style={{ gap: "6px" }}>
             <Download size={15} /> Export Data
           </button>
         </div>
       </div>
 
       {error && (
-        <div style={{padding:"12px 16px",background:"#FEE2E2",color:"#991B1B",borderRadius:"8px",marginBottom:"16px",fontSize:"14px"}}>
+        <div style={{ padding: "12px 16px", background: "#FEE2E2", color: "#991B1B", borderRadius: "8px", marginBottom: "16px", fontSize: "14px" }}>
           {error}
         </div>
       )}
 
       {/* KPI Cards */}
-      <div className="grid-4" style={{marginBottom:"var(--space-8)"}}>
+      <div className="grid-4" style={{ marginBottom: "var(--space-8)" }}>
         <StatCard
           label="Total Stalls"
           value={loading ? "..." : String(stats?.total_stalls ?? 0)}
           icon={<Store size={24} />}
           iconBg="#EFF6FF"
           iconColor="#2563EB"
-          trend={2}
-          trendLabel="vs last month"
         />
         <StatCard
           label="Occupied Stalls"
@@ -133,7 +191,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid-2" style={{marginBottom:"var(--space-8)"}}>
+      <div className="grid-2" style={{ marginBottom: "var(--space-8)" }}>
         {/* Complaints Bar Chart */}
         <div className="card">
           <div className="card-header">
@@ -145,29 +203,71 @@ export default function DashboardPage() {
               View All <ArrowRight size={13} />
             </Link>
           </div>
-          <div className="card-body" style={{paddingTop:"0"}}>
+          <div className="card-body" style={{ paddingTop: "0" }}>
             <div className="chart-container">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data?.complaints_by_category ?? []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                  <XAxis dataKey="category" tick={{fontSize:11}} stroke="#D1D5DB" />
-                  <YAxis tick={{fontSize:11}} stroke="#D1D5DB" />
-                  <Tooltip contentStyle={{borderRadius:"8px",border:"1px solid #E5E7EB",fontSize:"12px"}} />
-                  <Bar dataKey="count" fill="#11296B" radius={[4,4,0,0]} name="Complaints" />
+                  <XAxis dataKey="category" tick={{ fontSize: 11 }} stroke="#D1D5DB" />
+                  <YAxis tick={{ fontSize: 11 }} stroke="#D1D5DB" />
+                  <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #E5E7EB", fontSize: "12px" }} />
+                  <Bar dataKey="count" fill="#11296B" radius={[4, 4, 0, 0]} name="Complaints" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            {complaintsInsight && (
+              <div style={{ marginTop: "16px", padding: "12px", background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: "8px", display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                <Sparkles size={16} color="#7C3AED" style={{ flexShrink: 0, marginTop: "2px" }} />
+                <span style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.4" }}>
+                  <strong>Insight:</strong> {complaintsInsight}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Automated Insights */}
+        <div className="card">
+          <div className="card-header">
+            <div>
+              <div className="card-title" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Sparkles size={18} color="#7C3AED" /> Insights
+              </div>
+              <div className="card-subtitle">AI-driven analysis of current data</div>
+            </div>
+          </div>
+          <div className="card-body" style={{ paddingTop: "0", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto", maxHeight: "300px" }}>
+            {loading ? (
+              <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)", textAlign: "center", padding: "20px" }}>Analyzing data...</div>
+            ) : insights.length === 0 ? (
+              <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)", textAlign: "center", padding: "20px" }}>No insights generated.</div>
+            ) : (
+              insights.map((insight, idx) => {
+                const IconComponent = insight.icon;
+                return (
+                  <div key={idx} style={{ display: "flex", gap: "12px", padding: "12px", background: "#F9FAFB", borderRadius: "8px", border: "1px solid #E5E7EB", alignItems: "flex-start" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", borderRadius: "8px", background: insight.bg, color: insight.color, flexShrink: 0 }}>
+                      <IconComponent size={20} />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>{insight.title}</div>
+                      <div style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.4" }}>{insight.text}</div>
+                    </div>
+                  </div>
+                )
+              })
+            )}
           </div>
         </div>
       </div>
 
       {/* Bottom Row */}
-      <div className="grid-2" style={{marginBottom:"var(--space-8)"}}>
+      <div className="grid-2" style={{ marginBottom: "var(--space-8)" }}>
         {/* Recent Complaints */}
         <div className="card">
           <div className="card-header">
             <div className="card-title">Recent Complaints</div>
-            <Link href="/admin/complaints" className="btn btn-ghost btn-sm">See all <ArrowRight size={13}/></Link>
+            <Link href="/admin/complaints" className="btn btn-ghost btn-sm">See all <ArrowRight size={13} /></Link>
           </div>
           <div className="data-table-wrapper">
             <table className="data-table" aria-label="Recent complaints">
@@ -181,14 +281,14 @@ export default function DashboardPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={4} style={{textAlign:"center",padding:"20px",color:"var(--text-muted)"}}>Loading...</td></tr>
+                  <tr><td colSpan={4} style={{ textAlign: "center", padding: "20px", color: "var(--text-muted)" }}>Loading...</td></tr>
                 ) : (data?.recent_complaints ?? []).map((c) => {
                   const s = statusColorMap[c.status] ?? { label: c.status };
                   return (
                     <tr key={c.id}>
-                      <td style={{fontFamily:"var(--font-mono)",fontSize:"var(--text-xs)"}}>{c.complaint_number}</td>
-                      <td style={{fontWeight:600}}>{c.stall_number}</td>
-                      <td style={{color:"var(--text-secondary)",maxWidth:"180px"}}>{c.subject}</td>
+                      <td style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{c.complaint_number}</td>
+                      <td style={{ fontWeight: 600 }}>{c.stall_number}</td>
+                      <td style={{ color: "var(--text-secondary)", maxWidth: "180px" }}>{c.subject}</td>
                       <td>
                         <span className={`badge badge-${c.status} badge-dot`}>{s.label}</span>
                       </td>
@@ -201,31 +301,31 @@ export default function DashboardPage() {
         </div>
 
         {/* Alerts & Quick Actions */}
-        <div style={{display:"flex", flexDirection:"column", gap:"var(--space-5)"}}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
           {/* Alerts */}
           <div className="card">
             <div className="card-header">
               <div className="card-title">System Alerts</div>
             </div>
-            <div className="card-body" style={{display:"flex",flexDirection:"column",gap:"var(--space-3)"}}>
+            <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
               {loading ? (
-                <div style={{color:"var(--text-muted)",fontSize:"var(--text-sm)"}}>Loading alerts...</div>
+                <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>Loading alerts...</div>
               ) : (data?.alerts ?? []).length === 0 ? (
-                <div style={{color:"var(--text-muted)",fontSize:"var(--text-sm)"}}>No active alerts.</div>
+                <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>No active alerts.</div>
               ) : (data?.alerts ?? []).map((alert, i) => (
                 <div key={i} className={`alert-item alert-${alert.type}`}>
-                  <AlertCircle size={16} style={{flexShrink:0,marginTop:2}} />
+                  <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
                   <div>
-                    <strong style={{fontSize:"var(--text-sm)"}}>{alert.message}</strong>
+                    <strong style={{ fontSize: "var(--text-sm)" }}>{alert.message}</strong>
                   </div>
                 </div>
               ))}
               {stats?.pending_documents ? (
                 <div className="alert-item alert-info">
-                  <FileText size={16} style={{flexShrink:0,marginTop:2}} />
+                  <FileText size={16} style={{ flexShrink: 0, marginTop: 2 }} />
                   <div>
-                    <strong style={{fontSize:"var(--text-sm)"}}>Monthly report due soon</strong>
-                    <div style={{fontSize:"var(--text-xs)",color:"var(--text-secondary)"}}>Market summary pending</div>
+                    <strong style={{ fontSize: "var(--text-sm)" }}>Monthly report due soon</strong>
+                    <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>Market summary pending</div>
                   </div>
                 </div>
               ) : null}
@@ -235,14 +335,14 @@ export default function DashboardPage() {
           {/* Quick Actions */}
           <div className="card">
             <div className="card-header"><div className="card-title">Quick Actions</div></div>
-            <div className="card-body" style={{display:"flex",flexDirection:"column",gap:"var(--space-3)"}}>
-              <Link href="/map" className="btn btn-accent" style={{justifyContent:"flex-start",gap:"var(--space-3)"}}>
+            <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+              <Link href="/map" className="btn btn-accent" style={{ justifyContent: "flex-start", gap: "var(--space-3)" }}>
                 <Store size={16} /> View Market Map
               </Link>
-              <Link href="/admin/documents" className="btn btn-secondary" style={{justifyContent:"flex-start",gap:"var(--space-3)"}}>
+              <Link href="/admin/documents" className="btn btn-secondary" style={{ justifyContent: "flex-start", gap: "var(--space-3)" }}>
                 <FileText size={16} /> Review Documents
               </Link>
-              <Link href="/admin/reports" className="btn btn-ghost" style={{justifyContent:"flex-start",gap:"var(--space-3)"}}>
+              <Link href="/admin/reports" className="btn btn-ghost" style={{ justifyContent: "flex-start", gap: "var(--space-3)" }}>
                 <FileText size={16} /> Generate Report
               </Link>
             </div>
@@ -259,43 +359,51 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="card-body">
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:"var(--space-4)"}}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: "var(--space-4)" }}>
             {loading ? (
-              <div style={{color:"var(--text-muted)",fontSize:"var(--text-sm)",gridColumn:"1/-1"}}>Loading...</div>
+              <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)", gridColumn: "1/-1" }}>Loading...</div>
             ) : (data?.section_occupancy ?? []).map((s, i) => {
               const pct = s.occupancy_rate;
               const color = SECTION_COLORS[i % SECTION_COLORS.length];
               return (
                 <div key={s.section} style={{
-                  background:"#F9FAFB",
-                  borderRadius:"var(--radius-md)",
-                  padding:"var(--space-4)",
-                  textAlign:"center",
-                  border:"1px solid #E5E7EB"
+                  background: "#F9FAFB",
+                  borderRadius: "var(--radius-md)",
+                  padding: "var(--space-4)",
+                  textAlign: "center",
+                  border: "1px solid #E5E7EB"
                 }}>
                   <div style={{
-                    fontSize:"var(--text-xs)",color:"var(--text-secondary)",
-                    fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",
-                    marginBottom:"var(--space-2)"
+                    fontSize: "var(--text-xs)", color: "var(--text-secondary)",
+                    fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em",
+                    marginBottom: "var(--space-2)"
                   }}>Section {s.section}</div>
-                  <div style={{fontSize:"var(--text-2xl)",fontWeight:800,color}}>{pct}%</div>
-                  <div style={{fontSize:"var(--text-xs)",color:"var(--text-muted)",marginTop:"2px"}}>
+                  <div style={{ fontSize: "var(--text-2xl)", fontWeight: 800, color }}>{pct}%</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: "2px" }}>
                     {s.occupied}/{s.total} stalls
                   </div>
                   <div style={{
-                    marginTop:"var(--space-3)",height:"4px",background:"#E5E7EB",
-                    borderRadius:"2px",overflow:"hidden"
+                    marginTop: "var(--space-3)", height: "4px", background: "#E5E7EB",
+                    borderRadius: "2px", overflow: "hidden"
                   }}>
                     <div style={{
-                      height:"100%",width:`${pct}%`,
-                      background:color,borderRadius:"2px",
-                      transition:"width 0.3s ease"
+                      height: "100%", width: `${pct}%`,
+                      background: color, borderRadius: "2px",
+                      transition: "width 0.3s ease"
                     }} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Section ${s.section} occupancy`} />
                   </div>
                 </div>
               );
             })}
           </div>
+          {occupancyInsight && (
+            <div style={{ marginTop: "20px", padding: "12px", background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: "8px", display: "flex", gap: "8px", alignItems: "flex-start" }}>
+              <Sparkles size={16} color="#7C3AED" style={{ flexShrink: 0, marginTop: "2px" }} />
+              <span style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.4" }}>
+                <strong>Insight:</strong> {occupancyInsight}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </AppShell>

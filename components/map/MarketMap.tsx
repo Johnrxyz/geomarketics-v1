@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { X, ZoomIn, ZoomOut, Expand } from "lucide-react";
 
@@ -36,8 +35,7 @@ import {
   COMPLIANCE_CONFIG,
 } from "./types";
 
-import StallStatusLayer from "./layers/StallStatusLayer";
-import ComplianceLayer from "./layers/ComplianceLayer";
+import InlineSvgFloorPlan from "./InlineSvgFloorPlan";
 import WasteRiskLayer from "./layers/WasteRiskLayer";
 import ComplaintDensityLayer from "./layers/ComplaintDensityLayer";
 import MapLegend from "./MapLegend";
@@ -149,10 +147,18 @@ export default function MarketMap({
   const lastSelectedId = useRef<string | null>(null);
   const lastFocusTrigger = useRef(0);
 
-  const SVG_WIDTH = mapConfig.width;
+  // When viewing Annex standalone, expand canvas to match the Main floor width
+  // so both buildings appear at the same horizontal scale.
+  const mainFloorWidth = MAP_CONFIGS.main[activeFloor].width;
+  const SVG_WIDTH = (activeBuilding === 'annex' && !unifiedFloorView)
+    ? mainFloorWidth
+    : mapConfig.width;
   const SVG_HEIGHT = mapConfig.height;
-  // Annex is narrower than Main - center it horizontally
+  // Center Annex image horizontally within the wider canvas
   const annexConfig = ANNEX_CONFIGS[activeFloor];
+  const ANNEX_STANDALONE_X_OFFSET = (activeBuilding === 'annex' && !unifiedFloorView)
+    ? Math.floor((mainFloorWidth - mapConfig.width) / 2)
+    : 0;
   const ANNEX_X_OFFSET = unifiedFloorView ? Math.floor((SVG_WIDTH - annexConfig.width) / 2) : 0;
   const CANVAS_HEIGHT = unifiedFloorView
     ? annexConfig.height + COMBINED_BRIDGE_GAP + SVG_HEIGHT
@@ -169,12 +175,28 @@ export default function MarketMap({
     const pLeft = padding?.left || 0;
     const availW = Math.max(width - pLeft - pRight, 100);
     const availH = Math.max(height - pTop - pBottom, 100);
-    const initialScale = Math.max(
-      Math.min(availW / SVG_WIDTH, availH / (unifiedFloorView ? SVG_HEIGHT * 1.2 : CANVAS_HEIGHT)),
+    let initialScale = Math.max(
+      Math.min(availW / SVG_WIDTH, availH / CANVAS_HEIGHT),
       0.05
     );
+
+    if (unifiedFloorView) {
+      // Zoom in to fill the width nicely to avoid excessive side whitespace.
+      // This makes the text much more readable by default. The user can always pan up to see the Annex.
+      initialScale = Math.max(
+        availW / SVG_WIDTH,
+        0.05
+      );
+    }
+
     const initX = pLeft + (availW - SVG_WIDTH * initialScale) / 2;
-    const initY = pTop + (availH - CANVAS_HEIGHT * initialScale) / 2;
+    
+    let initY = pTop + (availH - CANVAS_HEIGHT * initialScale) / 2;
+    if (unifiedFloorView) {
+      // Center on the Main building (bottom portion)
+      const mainCenterY = annexConfig.height + COMBINED_BRIDGE_GAP + SVG_HEIGHT / 2;
+      initY = pTop + availH / 2 - mainCenterY * initialScale;
+    }
     if (animate) {
       isAnimating.current = true;
       setTransform({ x: initX, y: initY, scale: initialScale });
@@ -194,21 +216,31 @@ export default function MarketMap({
     isDragging.current = true;
     hasDragged.current = false;
     lastMouse.current = { x: e.clientX, y: e.clientY };
-    containerRef.current?.setPointerCapture(e.pointerId);
+    // Do not set pointer capture yet, to allow native clicks to pass through!
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!isDragging.current) return;
     const dx = e.clientX - lastMouse.current.x;
     const dy = e.clientY - lastMouse.current.y;
-    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) hasDragged.current = true;
-    setTransform((prev) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
-    lastMouse.current = { x: e.clientX, y: e.clientY };
+    
+    if (!hasDragged.current && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+      hasDragged.current = true;
+      // Now that we are actually dragging, capture the pointer
+      containerRef.current?.setPointerCapture(e.pointerId);
+    }
+    
+    if (hasDragged.current) {
+      setTransform((prev) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+      lastMouse.current = { x: e.clientX, y: e.clientY };
+    }
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
     isDragging.current = false;
-    containerRef.current?.releasePointerCapture(e.pointerId);
+    if (hasDragged.current) {
+      containerRef.current?.releasePointerCapture(e.pointerId);
+    }
   };
 
   // Wheel zoom (non-passive to allow preventDefault)
@@ -244,16 +276,67 @@ export default function MarketMap({
     const pLeft = padding?.left || 0;
     const availW = Math.max(rect.width - pLeft - pRight, 100);
     const availH = Math.max(rect.height - pTop - pBottom, 100);
-    const cx = pLeft + availW / 2;
-    const cy = pTop + availH / 2;
+    const viewportCx = pLeft + availW / 2;
+    const viewportCy = pTop + availH / 2;
+
+    // Default to database coords
+    let targetX = stall.svg_x || 0;
+    let targetY = stall.svg_y || 0;
+
+    // Dynamically lookup real DOM SVG element to get exact box center
+    if (stall.svg_cell_id) {
+      try {
+        const domGroup = containerRef.current.querySelector(`g[data-cell-id="${stall.svg_cell_id}"]`);
+        const domRect = domGroup?.querySelector('rect');
+        if (domRect) {
+          const rx = parseFloat(domRect.getAttribute("x") || "0");
+          const ry = parseFloat(domRect.getAttribute("y") || "0");
+          const rw = parseFloat(domRect.getAttribute("width") || "0");
+          const rh = parseFloat(domRect.getAttribute("height") || "0");
+          
+          let cx = rx + rw / 2;
+          let cy = ry + rh / 2;
+
+          // Handle rotated rects
+          const transformAttr = domRect.getAttribute("transform") || "";
+          const rotateMatch = transformAttr.match(/rotate\(([^)]+)\)/);
+          if (rotateMatch) {
+            const parts = rotateMatch[1].split(",").map(Number);
+            cx = parts[1] ?? rx + rw / 2;
+            cy = parts[2] ?? ry + rh / 2;
+          }
+
+          targetX = cx;
+          targetY = cy;
+
+          // Adjust to global canvas coordinates
+          if (stall.building === 'main' && unifiedFloorView) {
+            targetY += annexConfig.height + COMBINED_BRIDGE_GAP;
+          }
+          if (stall.building === 'annex' && !unifiedFloorView) {
+            targetX += ANNEX_STANDALONE_X_OFFSET;
+          }
+
+          // Update the stall object with the true coordinates so the tooltip popup renders correctly
+          stall.svg_x = targetX;
+          stall.svg_y = targetY;
+        }
+      } catch (e) {
+        console.error("Failed to find exact stall coordinates", e);
+      }
+    }
+
+    // Fallback protection if still 0,0
+    if (targetX === 0 && targetY === 0) return;
+
     isAnimating.current = true;
     setIsTransitioning(true);
     setTimeout(() => {
       setTransform((prev) => {
         const targetScale = Math.max(prev.scale, 0.6);
         return {
-          x: cx - stall.svg_x * targetScale,
-          y: cy - stall.svg_y * targetScale,
+          x: viewportCx - targetX * targetScale,
+          y: viewportCy - targetY * targetScale,
           scale: targetScale,
         };
       });
@@ -394,28 +477,40 @@ export default function MarketMap({
           transitionDuration: mapTransitioning ? "0.2s" : isTransitioning ? "0.5s" : "0s",
         }}
       >
-        {/* Main building floor plan - positioned below Annex in unified view */}
-        <Image
-          src={mapConfig.src}
-          alt={mapConfig.label}
-          width={SVG_WIDTH}
+        {/* Main building floor plan - inline SVG with clickable stalls */}
+        <InlineSvgFloorPlan
+          svgSrc={mapConfig.src}
+          width={mapConfig.width}
           height={SVG_HEIGHT}
-          priority
-          style={{ position: "absolute", top: unifiedFloorView ? annexConfig.height + COMBINED_BRIDGE_GAP : 0, left: 0, pointerEvents: "none" }}
+          stalls={visibleStalls.filter(s => s.building === 'main' || !unifiedFloorView)}
+          selectedStallId={selected?.id}
+          highlightedStallIds={highlightedStallIds}
+          activeLayer={activeLayer}
+          onStallClick={handleStallClick}
+          style={{
+            top: unifiedFloorView ? annexConfig.height + COMBINED_BRIDGE_GAP : 0,
+            left: ANNEX_STANDALONE_X_OFFSET,
+          }}
         />
 
         {/* In unified mode: Annex ON TOP (centered), road + center bridge, then Main below */}
         {unifiedFloorView && (() => {
           const BW = 150;  // bridge walkway width in SVG units (~size of one stall)
-          const BX = (SVG_WIDTH - BW) / 2; // bridge left x (centered)
+          const BX = (SVG_WIDTH - BW) / 2 - BW; // bridge left x (shifted left by one bridge width)
           const H = COMBINED_BRIDGE_GAP;
           return (
             <>
-              {/* Annex floor plan — centered horizontally */}
-              <img
-                src={annexConfig.src}
-                alt={annexConfig.label}
-                style={{ position: "absolute", top: 0, left: ANNEX_X_OFFSET, width: annexConfig.width, height: annexConfig.height, pointerEvents: "none" }}
+              {/* Annex floor plan — inline SVG with clickable stalls */}
+              <InlineSvgFloorPlan
+                svgSrc={annexConfig.src}
+                width={SVG_WIDTH}
+                height={annexConfig.height}
+                stalls={visibleStalls.filter(s => s.building === 'annex')}
+                selectedStallId={selected?.id}
+                highlightedStallIds={highlightedStallIds}
+                activeLayer={activeLayer}
+                onStallClick={handleStallClick}
+                style={{ top: 0, left: 0 }}
               />
               {/* Road + bridge connector strip */}
               <svg
@@ -494,23 +589,7 @@ export default function MarketMap({
           />
         )}
 
-        {/* â”€â”€ Stall layers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-        {activeLayer === "stall_status" && (
-          <StallStatusLayer
-            stalls={visibleStalls}
-            selectedStallId={selected?.id}
-            highlightedStallIds={highlightedStallIds}
-            onStallClick={handleStallClick}
-          />
-        )}
-        {activeLayer === "compliance" && (
-          <ComplianceLayer
-            stalls={visibleStalls}
-            selectedStallId={selected?.id}
-            highlightedStallIds={highlightedStallIds}
-            onStallClick={handleStallClick}
-          />
-        )}
+        {/* Stall layers are now rendered inline within the SVG floor plans above */}
 
         {/* â”€â”€ Navigation route overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         {navigationRoute && navigationRoute.points.length > 1 && (
