@@ -199,8 +199,11 @@ export default function SanitationPage() {
   const [apiCheckItems, setApiCheckItems] = useState<Record<string, number>>({});
   const [apiSectionMap, setApiSectionMap] = useState<Record<string, number>>({});
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const user = getUser();
+  const [user, setUser] = useState<any>(null);
 
+  useEffect(() => {
+    setUser(getUser());
+  }, []);
   // Load history on mount + load API metadata
   useEffect(() => {
     setHistory(loadFromStorage());

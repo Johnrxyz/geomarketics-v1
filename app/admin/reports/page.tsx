@@ -30,8 +30,11 @@ export default function ReportsPage() {
   const [saving, setSaving] = useState(false);
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [sections, setSections] = useState<{ id: number; code: string; name: string }[]>([]);
-  const user = getUser();
+  const [user, setUser] = useState<any>(null);
 
+  useEffect(() => {
+    setUser(getUser());
+  }, []);
   useEffect(() => {
     sectionsApi.list().then((data: unknown) => {
       const results = (data as { results?: { id: number; code: string; name: string }[] }).results || (data as { id: number; code: string; name: string }[]);

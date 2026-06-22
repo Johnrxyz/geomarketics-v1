@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Map, Store, AlertCircle,
   BarChart2, Globe, Users, FileText,
   ChevronLeft, ChevronRight, LogOut, ClipboardCheck,
-  FileWarning, Gavel, Brain, Activity
+  FileWarning, Gavel, Brain, Activity, Megaphone
 } from "lucide-react";
 
 type Role = "admin" | "vendor" | "customer";
@@ -18,30 +18,56 @@ interface NavItem {
   icon: React.ReactNode;
 }
 
-const adminNav: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard size={18} /> },
-  { label: "Market Map", href: "/map", icon: <Map size={18} /> },
-  { label: "Vendor Management", href: "/admin/vendors", icon: <Users size={18} /> },
-  { label: "Documents", href: "/admin/documents", icon: <FileText size={18} /> },
-  { label: "Sanitation", href: "/admin/sanitation", icon: <ClipboardCheck size={18} /> },
-  { label: "Complaints", href: "/admin/complaints", icon: <AlertCircle size={18} /> },
-  { label: "Blotters", href: "/admin/blotters", icon: <FileWarning size={18} /> },
-  { label: "Violations", href: "/admin/violations", icon: <Gavel size={18} /> },
-  { label: "AI Risk", href: "/admin/ai-risk", icon: <Brain size={18} /> },
-  { label: "Reports", href: "/admin/reports", icon: <BarChart2 size={18} /> },
-  { label: "Operations", href: "/admin/operations", icon: <Activity size={18} /> },
+interface NavSection {
+  sectionLabel?: string;
+  items: NavItem[];
+}
+
+const adminNav: NavSection[] = [
+  {
+    items: [
+      { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard size={18} /> },
+      { label: "Market Map", href: "/map", icon: <Map size={18} /> },
+    ]
+  },
+  {
+    sectionLabel: "Management",
+    items: [
+      { label: "Vendors", href: "/admin/vendors", icon: <Users size={18} /> },
+      { label: "Documents", href: "/admin/documents", icon: <FileText size={18} /> },
+      { label: "Sanitation", href: "/admin/sanitation", icon: <ClipboardCheck size={18} /> },
+      { label: "Announcements", href: "/admin/announcements", icon: <Megaphone size={18} /> },
+    ]
+  },
+  {
+    sectionLabel: "Incidents & Reports",
+    items: [
+      { label: "Complaints", href: "/admin/complaints", icon: <AlertCircle size={18} /> },
+      { label: "Blotters", href: "/admin/blotters", icon: <FileWarning size={18} /> },
+      { label: "Violations", href: "/admin/violations", icon: <Gavel size={18} /> },
+      { label: "Reports", href: "/admin/reports", icon: <BarChart2 size={18} /> },
+    ]
+  }
 ];
 
-const vendorNav: NavItem[] = [
-  { label: "My Profile", href: "/vendor/profile", icon: <Store size={18} /> },
-  { label: "Market Map", href: "/map", icon: <Map size={18} /> },
-  { label: "Documents", href: "/vendor/documents", icon: <FileText size={18} /> },
-  { label: "My Complaints", href: "/vendor/complaints", icon: <AlertCircle size={18} /> },
-  { label: "My Violations", href: "/vendor/violations", icon: <Gavel size={18} /> },
+const vendorNav: NavSection[] = [
+  {
+    items: [
+      { label: "My Profile", href: "/vendor/profile", icon: <Store size={18} /> },
+      { label: "Market Map", href: "/map", icon: <Map size={18} /> },
+      { label: "Documents", href: "/vendor/documents", icon: <FileText size={18} /> },
+      { label: "My Complaints", href: "/vendor/complaints", icon: <AlertCircle size={18} /> },
+      { label: "My Violations", href: "/vendor/violations", icon: <Gavel size={18} /> },
+    ]
+  }
 ];
 
-const customerNav: NavItem[] = [
-  { label: "My Complaints", href: "/consumer/complaints", icon: <AlertCircle size={18} /> },
+const customerNav: NavSection[] = [
+  {
+    items: [
+      { label: "My Complaints", href: "/consumer/complaints", icon: <AlertCircle size={18} /> },
+    ]
+  }
 ];
 
 interface SidebarProps {
@@ -65,32 +91,45 @@ export default function Sidebar({ role = "admin", collapsed, onToggle, mobileOpe
 
       {/* Nav */}
       <nav className="sidebar-nav">
-        <div className="sidebar-section-label">Main Menu</div>
-        {navItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`sidebar-link${isActive ? " active" : ""}`}
-              aria-current={isActive ? "page" : undefined}
-              title={collapsed ? item.label : undefined}
-              style={{
-                margin: "2px 8px",
-                borderRadius: "12px",
-                padding: "10px 12px",
-                background: isActive ? "rgba(255, 203, 5, 0.9)" : "transparent",
-                color: isActive ? "#11296B" : "rgba(255, 255, 255, 0.7)",
-                transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-              }}
-            >
-              <span className="sidebar-link-icon" aria-hidden="true" style={{ color: "inherit" }}>{item.icon}</span>
-              <span className="sidebar-link-text" style={{ fontWeight: isActive ? "700" : "500" }}>{item.label}</span>
-            </Link>
-          );
-        })}
+        {navItems.map((section, idx) => (
+          <div key={idx} style={{ marginBottom: section.sectionLabel ? "var(--space-2)" : 0 }}>
+            {section.sectionLabel && !collapsed && (
+              <div className="sidebar-section-label" style={{ marginTop: "var(--space-4)", paddingLeft: "20px", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px", color: "rgba(255,255,255,0.4)", fontWeight: 700 }}>
+                {section.sectionLabel}
+              </div>
+            )}
+            {section.sectionLabel && collapsed && (
+              <div style={{ height: "1px", background: "rgba(255,255,255,0.1)", margin: "16px 12px 8px" }} />
+            )}
+            
+            {section.items.map((item) => {
+              const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`sidebar-link${isActive ? " active" : ""}`}
+                  aria-current={isActive ? "page" : undefined}
+                  title={collapsed ? item.label : undefined}
+                  style={{
+                    margin: "2px 8px",
+                    borderRadius: "12px",
+                    padding: "10px 12px",
+                    background: isActive ? "rgba(255, 203, 5, 0.9)" : "transparent",
+                    color: isActive ? "#11296B" : "rgba(255, 255, 255, 0.7)",
+                    transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                  }}
+                >
+                  <span className="sidebar-link-icon" aria-hidden="true" style={{ color: "inherit" }}>{item.icon}</span>
+                  <span className="sidebar-link-text" style={{ fontWeight: isActive ? "700" : "500" }}>{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        ))}
 
-        <div className="sidebar-section-label" style={{ marginTop: "var(--space-4)", paddingLeft: "20px" }}>Public</div>
+        {!collapsed && <div className="sidebar-section-label" style={{ marginTop: "var(--space-4)", paddingLeft: "20px", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px", color: "rgba(255,255,255,0.4)", fontWeight: 700 }}>Public</div>}
+        {collapsed && <div style={{ height: "1px", background: "rgba(255,255,255,0.1)", margin: "16px 12px 8px" }} />}
         <Link
           href="/consumer"
           className={`sidebar-link${pathname === "/consumer" ? " active" : ""}`}

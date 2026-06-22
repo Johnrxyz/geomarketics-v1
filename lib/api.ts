@@ -516,3 +516,33 @@ export const accomplishmentApi = {
     return json(res);
   }
 };
+
+// ─── Announcements API ────────────────────────────────────────────────────────
+
+export const announcementsApi = {
+  async list(params: Record<string, string> = {}) {
+    const qs = new URLSearchParams(params).toString();
+    const res = await apiFetch(`/announcements/${qs ? '?' + qs : ''}`, {}, false);
+    return json(res);
+  },
+
+  async get(id: number | string) {
+    const res = await apiFetch(`/announcements/${id}/`, {}, false);
+    return json(res);
+  },
+
+  async create(data: Record<string, unknown>) {
+    const res = await apiFetch('/announcements/', { method: 'POST', body: JSON.stringify(data) });
+    return json(res);
+  },
+
+  async update(id: number | string, data: Record<string, unknown>) {
+    const res = await apiFetch(`/announcements/${id}/`, { method: 'PATCH', body: JSON.stringify(data) });
+    return json(res);
+  },
+
+  async delete(id: number | string) {
+    const res = await apiFetch(`/announcements/${id}/`, { method: 'DELETE' });
+    return res.ok;
+  }
+};

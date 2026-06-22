@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   TrendingUp, TrendingDown, Minus, Activity, ShoppingBag, MapPin, Search, 
   AlertCircle, Info, ChevronRight, ChevronLeft, BarChart2, Star, Calculator, Bookmark, Bell, X, Send,
-  ChefHat, Utensils, CheckCircle, ArrowDown, ArrowUp, Map
+  ChefHat, Utensils, CheckCircle, ArrowDown, ArrowUp, Map, Calendar, Clock, Megaphone, AlertTriangle, Shield
 } from "lucide-react";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceDot } from "recharts";
 import { complaintsApi, stallsApi } from "@/lib/api";
@@ -78,6 +78,12 @@ export default function LucenaDecisionSupport() {
   // State for Budget Planner
   const [budget, setBudget] = useState<string>("500");
   const [budgetResult, setBudgetResult] = useState<any>(null);
+
+  // State for Announcements
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [activeAnnouncementIndex, setActiveAnnouncementIndex] = useState(0);
+  const [expandedAnnouncement, setExpandedAnnouncement] = useState<number | null>(null);
+  const announcementIntervalRef = useRef<any>(null);
 
   // State for Complaint Modal
   const [isComplaintModalOpen, setIsComplaintModalOpen] = useState(false);
@@ -218,8 +224,17 @@ export default function LucenaDecisionSupport() {
   useEffect(() => {
     async function loadData() {
       try {
-        const { marketsApi, pricesApi } = await import('@/lib/api');
+        const { marketsApi, pricesApi, announcementsApi } = await import('@/lib/api');
         
+        // Fetch Announcements
+        try {
+          const apiAnnouncementsRes: any = await announcementsApi.list({ is_active: 'true' });
+          const apiAnnouncements = apiAnnouncementsRes.results || apiAnnouncementsRes;
+          setAnnouncements(apiAnnouncements);
+        } catch (e) {
+          console.error("Failed to load announcements", e);
+        }
+
         // Fetch Markets
         const apiMarketsRes: any = await marketsApi.list();
         const apiMarkets = apiMarketsRes.results || apiMarketsRes;
@@ -529,6 +544,85 @@ export default function LucenaDecisionSupport() {
 
       <main style={{ maxWidth: 1400, margin: "0 auto", padding: "var(--space-8) var(--space-6)" }}>
         
+        {/* ANNOUNCEMENTS: All at Once Grid */}
+        {announcements.length > 0 && (() => {
+          const priorityConfig: Record<string, { bg: string; border: string; badge: string; icon: any; label: string }> = {
+            high: { bg: 'linear-gradient(135deg, #FEF2F2 0%, #FFF7ED 100%)', border: '#F87171', badge: '#DC2626', icon: AlertTriangle, label: 'Urgent' },
+            medium: { bg: 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)', border: '#FBBF24', badge: '#D97706', icon: Bell, label: 'Notice' },
+            low: { bg: 'linear-gradient(135deg, #EFF6FF 0%, #E0F2FE 100%)', border: '#60A5FA', badge: '#2563EB', icon: Info, label: 'Info' },
+          };
+          const categoryIcons: Record<string, any> = {
+            schedule: Calendar, holiday: Star, inspection: Shield, advisory: AlertCircle, general: Megaphone
+          };
+
+          return (
+            <div style={{ marginBottom: 'var(--space-8)' }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+                <h2 style={{ fontSize: 'var(--text-xl)', fontWeight: 800, color: 'var(--color-accent)', margin: 0, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                  <Bell size={20} color="var(--color-primary)" />
+                  Market Announcements
+                  <span style={{ background: '#DC2626', color: 'white', fontSize: '11px', fontWeight: 800, padding: '2px 8px', borderRadius: '999px', marginLeft: 4 }}>
+                    {announcements.length}
+                  </span>
+                </h2>
+              </div>
+
+              {/* Cards Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 'var(--space-4)' }}>
+                {announcements.map((ann: any) => {
+                  const cfg = priorityConfig[ann?.priority ?? 'low'] ?? priorityConfig.low;
+                  const AnnIcon = categoryIcons[ann?.category] ?? Megaphone;
+                  return (
+                    <div key={ann.id}
+                      style={{ position: 'relative', background: cfg.bg, borderRadius: 16, border: `1.5px solid ${cfg.border}`, padding: '20px 24px', boxShadow: '0 4px 16px rgba(0,0,0,0.06)', overflow: 'hidden', cursor: 'pointer', transition: 'transform 0.2s, box-shadow 0.2s' }}
+                      onClick={() => setExpandedAnnouncement(expandedAnnouncement === ann.id ? null : ann.id)}
+                      onMouseOver={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 8px 24px rgba(0,0,0,0.1)'; }}
+                      onMouseOut={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.06)'; }}
+                    >
+                      {/* Decorative glow */}
+                      <div style={{ position: 'absolute', top: -30, right: -30, width: 120, height: 120, borderRadius: '50%', background: `${cfg.border}20`, pointerEvents: 'none' }} />
+
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, position: 'relative' }}>
+                        {/* Icon */}
+                        <div style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 12, background: cfg.badge, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 10px ${cfg.badge}44` }}>
+                          <AnnIcon size={20} color="white" />
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {/* Badges */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                            <span style={{ background: cfg.badge, color: 'white', fontSize: '10px', fontWeight: 800, padding: '2px 8px', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{cfg.label}</span>
+                            <span style={{ background: 'rgba(0,0,0,0.07)', color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', textTransform: 'capitalize' }}>{ann.category}</span>
+                            {ann.start_date && (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                                <Clock size={10} /> {new Date(ann.start_date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Title */}
+                          <div style={{ fontWeight: 800, fontSize: '15px', color: 'var(--text-primary)', marginBottom: 5, lineHeight: 1.3 }}>{ann.title}</div>
+
+                          {/* Content — expandable */}
+                          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, overflow: 'hidden', maxHeight: expandedAnnouncement === ann.id ? '300px' : '38px', transition: 'max-height 0.4s ease' }}>
+                            {ann.content}
+                          </div>
+
+                          <div style={{ marginTop: 8, fontSize: '12px', fontWeight: 700, color: cfg.badge }}>
+                            {expandedAnnouncement === ann.id ? 'Show less ▲' : 'Read more ▼'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
+        
         {/* Section 1: Today's Lucena Market Snapshot */}
         <div style={{ marginBottom: "var(--space-10)" }}>
           <div style={{ marginBottom: "var(--space-4)" }}>
@@ -598,7 +692,7 @@ export default function LucenaDecisionSupport() {
             </div>
           </div>
           
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "var(--space-4)" }}>
+          <div style={{ display: "flex", gap: "var(--space-4)", flexWrap: "wrap" }}>
             {(() => {
               const filteredStaples = activeCategory === 'All' ? staples : staples.filter(s => s.category === activeCategory || s.type === activeCategory.toLowerCase());
               const totalPages = Math.ceil(filteredStaples.length / itemsPerPage);
@@ -606,7 +700,7 @@ export default function LucenaDecisionSupport() {
               return (
                 <>
                   {paginatedStaples.map(item => (
-              <div key={item.id} className="card" style={{ padding: "var(--space-5)", display: "flex", flexDirection: "column", borderTop: `4px solid ${item.price === 0 ? '#9CA3AF' : item.status === 'below' ? '#16A34A' : item.status === 'above' ? '#DC2626' : '#EAB308'}` }}>
+              <div key={item.id} className="card" style={{ padding: "var(--space-5)", display: "flex", flexDirection: "column", borderTop: `4px solid ${item.price === 0 ? '#9CA3AF' : item.status === 'below' ? '#16A34A' : item.status === 'above' ? '#DC2626' : '#EAB308'}`, width: "200px", flexShrink: 0 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "var(--space-2)" }}>
                   <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "var(--text-secondary)" }}>{item.name}</div>
                   <Bookmark size={16} color="var(--text-muted)" style={{ cursor: "pointer" }} />
