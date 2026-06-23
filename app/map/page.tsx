@@ -322,7 +322,7 @@ function MapContent() {
         });
         
         // Automatically update the stall's status to "owner" (Managed by Owner)
-        await stallsApi.update(actionStall.dbId, {
+        await stallsApi.update(actionStall.dbId!, {
           status: "owner",
         });
         
