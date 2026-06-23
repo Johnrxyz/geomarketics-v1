@@ -14,6 +14,7 @@ interface InlineSvgFloorPlanProps {
   highlightedStallIds?: string[];
   activeLayer: MapLayerId;
   onStallClick: (stall: MarketStall) => void;
+  onLoad?: () => void;
   style?: React.CSSProperties;
 }
 
@@ -103,6 +104,7 @@ export default function InlineSvgFloorPlan({
   highlightedStallIds = [],
   activeLayer,
   onStallClick,
+  onLoad,
   style,
 }: InlineSvgFloorPlanProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -232,7 +234,9 @@ export default function InlineSvgFloorPlan({
               onStallClickRef.current(stall);
             } else {
               e.stopPropagation();
-              console.log(`Unmapped SVG Cell ID: ${cellId}`);
+              navigator.clipboard.writeText(cellId).then(() => {
+                console.log(`Unmapped SVG Cell ID copied to clipboard: ${cellId}`);
+              });
             }
           });
 
@@ -270,6 +274,7 @@ export default function InlineSvgFloorPlan({
 
       svgLoadedRef.current = true;
       applyStallStyles();
+      if (onLoad) onLoad();
     })();
 
     return () => { cancelled = true; };

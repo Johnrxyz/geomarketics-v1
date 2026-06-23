@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { X, ZoomIn, ZoomOut, Expand, ClipboardCheck, AlertTriangle, UserPlus, MessageSquare, Wrench, ExternalLink } from "lucide-react";
+import PF from "pathfinding";
 
 // Re-export types for backward compatibility
 export type {
@@ -157,7 +158,12 @@ export default function MarketMap({
   const lastMouse = useRef({ x: 0, y: 0 });
   const isAnimating = useRef(false);
   const lastSelectedId = useRef<string | null>(null);
-  const lastFocusTrigger = useRef(0);
+  const lastFocusTrigger = useRef<number | undefined>(undefined);
+
+  // State for intelligent pathfinding
+  const [navGrid, setNavGrid] = useState<PF.Grid | null>(null);
+  const [detailedRoutePoints, setDetailedRoutePoints] = useState<{x: number, y: number}[]>([]);
+  const [svgLoadCount, setSvgLoadCount] = useState(0);
 
   // When viewing Annex standalone, expand canvas to match the Main floor width
   // so both buildings appear at the same horizontal scale.
@@ -192,11 +198,13 @@ export default function MarketMap({
       0.05
     );
 
+    let isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
     if (unifiedFloorView) {
       // Zoom in to fill the width nicely to avoid excessive side whitespace.
-      // This makes the text much more readable by default. The user can always pan up to see the Annex.
+      // On mobile, apply a multiplier so the stalls appear larger and more readable by default.
       initialScale = Math.max(
-        availW / SVG_WIDTH,
+        (availW / SVG_WIDTH) * (isMobile ? 1.8 : 1),
         0.05
       );
     }
@@ -211,16 +219,205 @@ export default function MarketMap({
     }
     if (animate) {
       isAnimating.current = true;
+      setIsTransitioning(true);
       setTransform({ x: initX, y: initY, scale: initialScale });
-      setTimeout(() => { isAnimating.current = false; }, 500);
+      setTimeout(() => { 
+        isAnimating.current = false; 
+        setIsTransitioning(false);
+      }, 500);
     } else {
       setTransform({ x: initX, y: initY, scale: initialScale });
     }
-  }, [SVG_WIDTH, CANVAS_HEIGHT, unifiedFloorView]);
+  }, [SVG_WIDTH, CANVAS_HEIGHT, unifiedFloorView, annexConfig]);
 
   // Re-fit when building/floor changes (new SVG dimensions)
   useEffect(() => { fitMap(false); }, [activeBuilding, activeFloor, fitMap]);
   useEffect(() => { fitMap(false); }, [padding?.top, padding?.right, padding?.bottom, padding?.left]);
+
+  // Zoom out when navigation route is set so the user can see the full path
+  useEffect(() => {
+    if (navigationRoute) {
+      fitMap(true);
+    }
+  }, [navigationRoute, fitMap]);
+
+  // -- Build Navigation Grid ----------------------------------------------
+  useEffect(() => {
+    if (!containerRef.current || svgLoadCount === 0) return;
+
+    const timeoutId = setTimeout(() => {
+      const CELL_SIZE = 20;
+      const cols = Math.ceil(SVG_WIDTH / CELL_SIZE);
+      const rows = Math.ceil(CANVAS_HEIGHT / CELL_SIZE);
+      const grid = new PF.Grid(cols, rows);
+
+      const allSvgs = containerRef.current!.querySelectorAll('svg');
+
+      allSvgs.forEach(svgEl => {
+        if (!svgEl.querySelector('g[data-cell-id]')) return;
+
+        const parentDiv = svgEl.parentElement;
+        if (!parentDiv) return;
+        const containerLeft = parseFloat(parentDiv.style.left) || 0;
+        const containerTop = parseFloat(parentDiv.style.top) || 0;
+
+        const viewBoxAttr = svgEl.getAttribute('viewBox');
+        const displayW = parseFloat(svgEl.getAttribute('width') || '0');
+        const displayH = parseFloat(svgEl.getAttribute('height') || '0');
+
+        let scale = 1, svgOffsetX = 0, svgOffsetY = 0;
+        if (viewBoxAttr && displayW > 0 && displayH > 0) {
+          const vb = viewBoxAttr.split(/[\s,]+/).map(Number);
+          const vbW = vb[2] || displayW;
+          const vbH = vb[3] || displayH;
+          scale = Math.min(displayW / vbW, displayH / vbH);
+          svgOffsetX = (displayW - vbW * scale) / 2;
+          svgOffsetY = (displayH - vbH * scale) / 2;
+        }
+
+        const cellGroups = svgEl.querySelectorAll('g[data-cell-id]');
+        cellGroups.forEach(g => {
+          const cellId = g.getAttribute('data-cell-id');
+          if (cellId === '0' || cellId === '1') return;
+
+          const rect = g.querySelector('rect');
+          if (!rect) return;
+
+          const x = parseFloat(rect.getAttribute('x') || '0');
+          const y = parseFloat(rect.getAttribute('y') || '0');
+          const w = parseFloat(rect.getAttribute('width') || '0');
+          const h = parseFloat(rect.getAttribute('height') || '0');
+          const transform = rect.getAttribute('transform') || '';
+
+          let minX: number, minY: number, maxX: number, maxY: number;
+          const rotMatch = transform.match(/rotate\(([^)]+)\)/);
+          if (rotMatch) {
+            const parts = rotMatch[1].split(',').map(Number);
+            const angle = (parts[0] || 0) * Math.PI / 180;
+            const cx = parts.length > 1 ? parts[1] : x + w / 2;
+            const cy = parts.length > 2 ? parts[2] : y + h / 2;
+            const cosA = Math.cos(angle);
+            const sinA = Math.sin(angle);
+            const corners: [number, number][] = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+            const rotated = corners.map(([px, py]) => [
+              cx + (px - cx) * cosA - (py - cy) * sinA,
+              cy + (px - cx) * sinA + (py - cy) * cosA
+            ]);
+            minX = Math.min(...rotated.map(r => r[0]));
+            maxX = Math.max(...rotated.map(r => r[0]));
+            minY = Math.min(...rotated.map(r => r[1]));
+            maxY = Math.max(...rotated.map(r => r[1]));
+          } else {
+            minX = x;
+            maxX = x + w;
+            minY = y;
+            maxY = y + h;
+          }
+
+          const canvasMinX = minX * scale + svgOffsetX + containerLeft;
+          const canvasMaxX = maxX * scale + svgOffsetX + containerLeft;
+          const canvasMinY = minY * scale + svgOffsetY + containerTop;
+          const canvasMaxY = maxY * scale + svgOffsetY + containerTop;
+
+          const startCol = Math.max(0, Math.floor(canvasMinX / CELL_SIZE));
+          const endCol = Math.min(cols - 1, Math.floor(canvasMaxX / CELL_SIZE));
+          const startRow = Math.max(0, Math.floor(canvasMinY / CELL_SIZE));
+          const endRow = Math.min(rows - 1, Math.floor(canvasMaxY / CELL_SIZE));
+
+          for (let r = startRow; r <= endRow; r++) {
+            for (let c = startCol; c <= endCol; c++) {
+              grid.setWalkableAt(c, r, false);
+            }
+          }
+        });
+      });
+
+      setNavGrid(grid);
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [svgLoadCount, SVG_WIDTH, CANVAS_HEIGHT]);
+
+  // -- Compute Detailed Route ---------------------------------------------
+  useEffect(() => {
+    if (!navigationRoute || !navGrid || navigationRoute.points.length < 2) {
+      setDetailedRoutePoints([]);
+      return;
+    }
+
+    const CELL_SIZE = 20;
+    const finder = new PF.AStarFinder({
+      allowDiagonal: false,
+      dontCrossCorners: true
+    });
+    
+    let fullPath: {x: number, y: number}[] = [];
+    const pts = navigationRoute.points;
+    
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      
+      const gridClone = navGrid.clone();
+      
+      let startX = Math.min(gridClone.width - 1, Math.max(0, Math.floor(p1.x / CELL_SIZE)));
+      let startY = Math.min(gridClone.height - 1, Math.max(0, Math.floor(p1.y / CELL_SIZE)));
+      let endX = Math.min(gridClone.width - 1, Math.max(0, Math.floor(p2.x / CELL_SIZE)));
+      let endY = Math.min(gridClone.height - 1, Math.max(0, Math.floor(p2.y / CELL_SIZE)));
+      
+      // Instead of punching a massive hole in the grid (which causes shortcuts through adjacent stalls),
+      // we find the nearest walkable cell (the aisle) and route from there!
+      const findNearestWalkable = (cx: number, cy: number, maxDist = 20) => {
+        if (gridClone.isWalkableAt(cx, cy)) return { x: cx, y: cy };
+        for (let r = 1; r <= maxDist; r++) {
+          for (let i = -r; i <= r; i++) {
+            for (let j = -r; j <= r; j++) {
+              // Only check the perimeter of the square radius
+              if (Math.abs(i) === r || Math.abs(j) === r) {
+                const nx = cx + i;
+                const ny = cy + j;
+                if (nx >= 0 && nx < gridClone.width && ny >= 0 && ny < gridClone.height) {
+                  if (gridClone.isWalkableAt(nx, ny)) return { x: nx, y: ny };
+                }
+              }
+            }
+          }
+        }
+        return { x: cx, y: cy }; // Fallback
+      };
+      
+      const startNode = findNearestWalkable(startX, startY);
+      const endNode = findNearestWalkable(endX, endY);
+      
+      // Find path between the aisles
+      const path = finder.findPath(startNode.x, startNode.y, endNode.x, endNode.y, gridClone);
+      
+      if (path.length > 0) {
+        // Convert back to SVG coordinates
+        const segmentPoints = path.map(node => ({
+          x: node[0] * CELL_SIZE + CELL_SIZE / 2,
+          y: node[1] * CELL_SIZE + CELL_SIZE / 2
+        }));
+        
+        // Remove the first point if it's not the very first segment to avoid duplicates
+        if (i > 0 && segmentPoints.length > 0) {
+          segmentPoints.shift();
+        }
+        fullPath = [...fullPath, ...segmentPoints];
+      } else {
+        // Fallback to straight line
+        fullPath = [...fullPath, p1, p2];
+      }
+    }
+    
+    // Exact start/end
+    if (fullPath.length > 0) {
+      fullPath[0] = { x: pts[0].x, y: pts[0].y };
+      fullPath[fullPath.length - 1] = { x: pts[pts.length - 1].x, y: pts[pts.length - 1].y };
+    }
+    
+    setDetailedRoutePoints(fullPath);
+  }, [navigationRoute, navGrid]);
 
   // -- Pointer events -----------------------------------------------------
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -282,7 +479,7 @@ export default function MarketMap({
     return () => container.removeEventListener("wheel", onWheel);
   }, []);
 
-  // â”€â”€ Fly to stall â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————————————————————————————
   const flyToStall = useCallback((stall: MarketStall) => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
@@ -362,7 +559,7 @@ export default function MarketMap({
       isAnimating.current = false;
       setIsTransitioning(false);
     }, 600);
-  }, [padding]);
+  }, [padding, annexConfig.height, unifiedFloorView, ANNEX_STANDALONE_X_OFFSET]);
 
   // Sync external selectedStallId
   useEffect(() => {
@@ -378,10 +575,10 @@ export default function MarketMap({
       setSelected(null);
     }
     lastSelectedId.current = selectedStallId || null;
-    lastFocusTrigger.current = focusTrigger || 0;
+    lastFocusTrigger.current = focusTrigger;
   }, [selectedStallId, stalls, focusTrigger, flyToStall]);
 
-  // â”€â”€ Zoom controls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————————————————————————————
   const handleZoom = (dir: "in" | "out") => {
     if (isAnimating.current) return;
     isAnimating.current = true;
@@ -405,7 +602,7 @@ export default function MarketMap({
     }, 300);
   };
 
-  // â”€â”€ Onboarding micro-interaction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————————————————————————————
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
@@ -424,7 +621,7 @@ export default function MarketMap({
     return () => clearTimeout(timer);
   }, [showOnboarding]);
 
-  // â”€â”€ Filter stalls by current building + floor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————————————————————————————
   // In unified view: Annex is on TOP, Main is below.
   // Main stalls get Y offset pushed down past Annex height + bridge gap.
   const MAIN_Y_OFFSET = unifiedFloorView ? annexConfig.height + COMBINED_BRIDGE_GAP : 0;
@@ -440,7 +637,7 @@ export default function MarketMap({
         (s) => s.building === activeBuilding && s.floor === activeFloor
       );
 
-  // â”€â”€ Handle stall click â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————————————————————————————————————————————————————
   const handleStallClick = (stall: MarketStall) => {
     if (hasDragged.current) return;
     if (onStallSelect) onStallSelect(stall);
@@ -478,9 +675,9 @@ export default function MarketMap({
       onPointerLeave={handlePointerUp}
       onDragStart={(e) => e.preventDefault()}
       role="application"
-      aria-label={`Interactive Market Map â€” ${mapConfig.label}`}
+      aria-label={`Interactive Market Map — ${mapConfig.label}`}
     >
-      {/* â”€â”€ Scrollable canvas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* —————————————————————————————————————————————————————————————————————————————————————————————— */}
       <div
         style={{
           transformOrigin: "0 0",
@@ -506,6 +703,7 @@ export default function MarketMap({
           highlightedStallIds={highlightedStallIds}
           activeLayer={activeLayer}
           onStallClick={handleStallClick}
+          onLoad={() => setSvgLoadCount(c => c + 1)}
           style={{
             top: unifiedFloorView ? annexConfig.height + COMBINED_BRIDGE_GAP : 0,
             left: ANNEX_STANDALONE_X_OFFSET,
@@ -529,6 +727,7 @@ export default function MarketMap({
                 highlightedStallIds={highlightedStallIds}
                 activeLayer={activeLayer}
                 onStallClick={handleStallClick}
+                onLoad={() => setSvgLoadCount(c => c + 1)}
                 style={{ top: 0, left: 0 }}
               />
               {/* Road + bridge connector strip */}
@@ -618,7 +817,7 @@ export default function MarketMap({
               top: 0,
               left: 0,
               width: SVG_WIDTH,
-              height: SVG_HEIGHT,
+              height: CANVAS_HEIGHT,
               pointerEvents: "none",
               zIndex: 5,
             }}
@@ -633,7 +832,7 @@ export default function MarketMap({
               </filter>
             </defs>
             <polyline
-              points={navigationRoute.points.map((p) => `${p.x},${p.y}`).join(" ")}
+              points={(detailedRoutePoints.length > 0 ? detailedRoutePoints : navigationRoute.points).map((p) => `${p.x},${p.y}`).join(" ")}
               fill="none"
               stroke="#3B82F6"
               strokeWidth="24"
@@ -660,11 +859,13 @@ export default function MarketMap({
 
       {/* â”€â”€ Stall popup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {selected && (() => {
-        const popupScale = Math.max(0.6, Math.min(1.2, transform.scale / 0.15));
         const occupancyConf = OCCUPANCY_CONFIG[selected.occupancy_status];
         const complianceConf = selected.compliance_status
           ? COMPLIANCE_CONFIG[selected.compliance_status]
           : null;
+
+        // Dynamic scale logic: shrink bubble slightly when map is zoomed out so it doesn't obscure everything
+        const dynamicScale = Math.max(0.65, Math.min(1, transform.scale * 4));
 
         return (
           <div
@@ -673,18 +874,21 @@ export default function MarketMap({
               position: "absolute",
               left: transform.x + selected.svg_x * transform.scale,
               top: transform.y + selected.svg_y * transform.scale - 40 * transform.scale - 15,
-              transform: `translate(-50%, -100%) scale(${popupScale})`,
+              transform: `translate(-50%, -100%) scale(${dynamicScale})`,
               transformOrigin: "bottom center",
-              background: "white",
-              borderRadius: 14,
+              background: "rgba(255, 255, 255, 0.65)",
+              backdropFilter: "blur(16px)",
+              WebkitBackdropFilter: "blur(16px)",
+              borderRadius: 16,
               padding: "16px",
-              boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
+              boxShadow: "0 8px 32px rgba(31, 38, 135, 0.15)",
               display: "flex",
               flexDirection: "column",
               gap: 10,
               width: 280,
               zIndex: 1000,
-              border: `2px solid ${occupancyConf.border}`,
+              border: `1px solid rgba(255, 255, 255, 0.4)`,
+              borderTop: `2px solid ${occupancyConf.border}`, // Keep a hint of occupancy color at the top
               animation: "popIn 0.2s cubic-bezier(0.16,1,0.3,1)",
               cursor: "default",
             }}
@@ -695,14 +899,16 @@ export default function MarketMap({
             {/* Caret */}
             <div style={{
               position: "absolute",
-              bottom: -7,
+              bottom: -6,
               left: "50%",
               transform: "translateX(-50%) rotate(45deg)",
               width: 12,
               height: 12,
-              background: "white",
-              borderBottom: `2px solid ${occupancyConf.border}`,
-              borderRight: `2px solid ${occupancyConf.border}`,
+              background: "rgba(255, 255, 255, 0.65)",
+              backdropFilter: "blur(16px)",
+              WebkitBackdropFilter: "blur(16px)",
+              borderBottom: `1px solid rgba(255, 255, 255, 0.4)`,
+              borderRight: `1px solid rgba(255, 255, 255, 0.4)`,
               borderBottomRightRadius: 2,
             }} />
 
@@ -801,10 +1007,10 @@ export default function MarketMap({
                     <MessageSquare size={14} /> Send Notice
                   </button>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)" }}>
-                  <button className="btn" onClick={() => onWorkOrder?.(selected)} style={{ background: "#FFFBEB", color: "#D97706", fontSize: 11, padding: "6px", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, border: "1px solid #FDE68A" }}>
-                    <Wrench size={14} /> Work Order
-                  </button>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "var(--space-2)" }}>
+                  {/*<button className="btn" onClick={() => onWorkOrder?.(selected)} style={{ background: "#FFFBEB", color: "#D97706", fontSize: 11, padding: "6px", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, border: "1px solid #FDE68A" }}>
+                    <Wrench size={12} /> Work Order
+                  </button>*/}
                   <Link href={`/admin/stalls/${selected.dbId}`} className="btn btn-primary" style={{ fontSize: 11, padding: "6px", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
                     <ExternalLink size={14} /> Full Details
                   </Link>

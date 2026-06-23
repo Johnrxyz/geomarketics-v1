@@ -110,7 +110,7 @@ export default function AdminStallProfilePage({ params }: { params: Promise<{ id
   };
 
   return (
-    <AppShell pageTitle="Stall Profile" role="admin" userName="Admin User" userRole="Administrator">
+    <AppShell pageTitle="Stall Profile" role="admin" userName="Admin User" userRole="Administrator" hideBreadcrumbs={true}>
       <div className="page-header">
         <div className="page-header-left">
           <button 
@@ -151,10 +151,10 @@ export default function AdminStallProfilePage({ params }: { params: Promise<{ id
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: "var(--space-6)", alignItems: "flex-start" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-6)", alignItems: "flex-start" }}>
         
         {/* Left Column: Specs & Details */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
+        <div style={{ flex: "1 1 400px", display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
           
           {/* Overview Card */}
           <div className="card">
@@ -241,7 +241,7 @@ export default function AdminStallProfilePage({ params }: { params: Promise<{ id
         </div>
 
         {/* Right Column: Occupant */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
+        <div style={{ flex: "1 1 340px", maxWidth: "100%", display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
           <div className="card">
             <div className="card-header">
               <div className="card-title">Current Occupant</div>

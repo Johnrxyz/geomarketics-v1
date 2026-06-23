@@ -3,14 +3,14 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
-  TrendingUp, TrendingDown, Minus, Activity, ShoppingBag, MapPin, Search, 
+  TrendingUp, TrendingDown, Minus, Activity, ShoppingBag, MapPin, Search,
   AlertCircle, Info, ChevronRight, ChevronLeft, BarChart2, Star, Calculator, Bookmark, Bell, X, Send,
   ChefHat, Utensils, CheckCircle, ArrowDown, ArrowUp, Map, Calendar, Clock, Megaphone, AlertTriangle, Shield, Menu
 } from "lucide-react";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceDot } from "recharts";
 import { complaintsApi, stallsApi } from "@/lib/api";
 import MarketMap, { MarketStall, OCCUPANCY_CONFIG } from "@/components/map/MarketMap";
-import { LEGACY_TO_OCCUPANCY, LEGACY_TO_COMPLIANCE } from "@/components/map/types";
+import { LEGACY_TO_OCCUPANCY, LEGACY_TO_COMPLIANCE, MAP_CONFIGS, ANNEX_CONFIGS, COMBINED_BRIDGE_GAP, BuildingId } from "@/components/map/types";
 import { getLegendEntries } from "@/components/map/MapLegend";
 import { RECIPES, Recipe } from "../data/recipes";
 import LoginModal from "@/components/auth/LoginModal";
@@ -48,6 +48,78 @@ const MARKETS = [
   { id: 'imus', name: 'Imus Public Market' }
 ];
 
+const CONSUMER_FLOOR = '1' as const;
+const CONSUMER_ANNEX_CFG = ANNEX_CONFIGS[CONSUMER_FLOOR];
+const CONSUMER_MAIN_CFG = MAP_CONFIGS.main[CONSUMER_FLOOR];
+const CONSUMER_MAIN_Y_OFFSET = CONSUMER_ANNEX_CFG.height + COMBINED_BRIDGE_GAP;
+const CONSUMER_ANNEX_X_OFFSET = Math.floor((CONSUMER_MAIN_CFG.width - CONSUMER_ANNEX_CFG.width) / 2);
+
+const toCanvasCoords = (s: { svg_x: number; svg_y: number; building?: string; svg_cell_id?: string }) => {
+  let x = s.svg_x;
+  let y = s.svg_y;
+
+  // If the map is rendered, we can find the exact physical SVG coordinates from the DOM!
+  if (s.svg_cell_id && typeof document !== 'undefined') {
+    const g = document.querySelector(`g[data-cell-id="${s.svg_cell_id}"]`);
+    if (g) {
+      const rect = g.querySelector('rect');
+      if (rect) {
+        const rx = parseFloat(rect.getAttribute('x') || '0');
+        const ry = parseFloat(rect.getAttribute('y') || '0');
+        const rw = parseFloat(rect.getAttribute('width') || '0');
+        const rh = parseFloat(rect.getAttribute('height') || '0');
+        const transform = rect.getAttribute('transform') || '';
+
+        let cx = rx + rw / 2;
+        let cy = ry + rh / 2;
+
+        const rotMatch = transform.match(/rotate\(([^)]+)\)/);
+        if (rotMatch) {
+          const parts = rotMatch[1].split(',').map(Number);
+          if (parts.length > 2) {
+            cx = parts[1];
+            cy = parts[2];
+          }
+        }
+
+        x = cx;
+        y = cy;
+      }
+    }
+  }
+
+  if (s.building === 'main') {
+    y += CONSUMER_MAIN_Y_OFFSET;
+  } else if (s.building === 'annex') {
+    x += CONSUMER_ANNEX_X_OFFSET;
+  }
+  return { x, y };
+};
+
+const LANDMARKS = [
+  { id: "elevator", svg_x: 2173, svg_y: 1978, label: "Elevator", building: "main" },
+  { id: "market-office", svg_x: 3790, svg_y: 450, label: "Market Office", building: "main" },
+  { id: "information", svg_x: 2173, svg_y: 2900, label: "Information", building: "main" }
+];
+
+const getClosestEntrance = (targetX: number, targetY: number) => {
+  const ENTRANCES = LANDMARKS.map(l => {
+    const { x, y } = toCanvasCoords(l);
+    return { id: l.id, x, y, label: l.label };
+  });
+
+  let closest = ENTRANCES[0];
+  let minDist = Infinity;
+  for (const ent of ENTRANCES) {
+    const dist = Math.sqrt(Math.pow(targetX - ent.x, 2) + Math.pow(targetY - ent.y, 2));
+    if (dist < minDist) {
+      minDist = dist;
+      closest = ent;
+    }
+  }
+  return closest;
+};
+
 export default function LucenaDecisionSupport() {
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => {
@@ -63,8 +135,17 @@ export default function LucenaDecisionSupport() {
   const [categories, setCategories] = useState<string[]>(['All']);
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-  
+  const [isMobileGrid, setIsMobileGrid] = useState(false);
+  const [alerts, setAlerts] = useState<any[]>(ALERTS);
+  useEffect(() => {
+    const handleResize = () => setIsMobileGrid(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const itemsPerPage = isMobileGrid ? 6 : 12;
+
   // State for Login Modal
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -110,7 +191,7 @@ export default function LucenaDecisionSupport() {
   const [mapSearch, setMapSearch] = useState("");
   const [selectedMapStallId, setSelectedMapStallId] = useState<string | null>(null);
   const [highlightedMapStallIds, setHighlightedMapStallIds] = useState<string[]>([]);
-  const [navigationRoute, setNavigationRoute] = useState<{ points: {x: number, y: number, label: string}[], totalDistanceMeters: number } | null>(null);
+  const [navigationRoute, setNavigationRoute] = useState<{ points: { x: number, y: number, label: string }[], totalDistanceMeters: number } | null>(null);
   const [isMobilePanelExpanded, setIsMobilePanelExpanded] = useState(false);
 
   useEffect(() => {
@@ -122,7 +203,7 @@ export default function LucenaDecisionSupport() {
 
         const STALL_W = 200;
         const STALL_H = 120;
-        const COLS    = 12;
+        const COLS = 12;
         const SEC_PAD = 400;
 
         const sectionIndex: Record<string, number> = {};
@@ -183,7 +264,7 @@ export default function LucenaDecisionSupport() {
   const handleComplaintSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!complaintForm.email || !complaintForm.description) return;
-    
+
     setIsSubmittingComplaint(true);
     try {
       const formData = new FormData();
@@ -230,7 +311,7 @@ export default function LucenaDecisionSupport() {
     async function loadData() {
       try {
         const { marketsApi, pricesApi, announcementsApi } = await import('@/lib/api');
-        
+
         // Fetch Announcements
         try {
           const apiAnnouncementsRes: any = await announcementsApi.list({ is_active: 'true' });
@@ -243,9 +324,9 @@ export default function LucenaDecisionSupport() {
         // Fetch Markets
         const apiMarketsRes: any = await marketsApi.list();
         const apiMarkets = apiMarketsRes.results || apiMarketsRes;
-        
-        // Fetch Snapshots (fetch a good chunk to ensure we have recent data)
-        const apiSnapshotsRes: any = await pricesApi.snapshots({ page_size: '1000' });
+
+        // Fetch Snapshots (fetch a good chunk to ensure we have recent data for a full 7-day sparkline)
+        const apiSnapshotsRes: any = await pricesApi.snapshots({ page_size: '10000' });
         const apiSnapshots = apiSnapshotsRes.results || apiSnapshotsRes;
 
         if (apiMarkets.length > 0 && apiSnapshots.length > 0) {
@@ -257,30 +338,46 @@ export default function LucenaDecisionSupport() {
 
           const lucenaMarket = apiMarkets.find((m: any) => m.name.toLowerCase().includes('lucena'));
           const commodities = Array.from(new Set(apiSnapshots.map((s: any) => s.commodity_name)));
-          
+
           const liveStaples = commodities.map((cName: any) => {
             const commoditySnaps = apiSnapshots.filter((s: any) => s.commodity_name === cName);
-            
-            const lucenaSnaps = lucenaMarket 
-              ? commoditySnaps.filter((s: any) => s.market === lucenaMarket.id).sort((a:any, b:any) => new Date(b.survey_date).getTime() - new Date(a.survey_date).getTime())
+
+            const lucenaSnaps = lucenaMarket
+              ? commoditySnaps.filter((s: any) => s.market === lucenaMarket.id).sort((a: any, b: any) => new Date(b.survey_date).getTime() - new Date(a.survey_date).getTime())
               : [];
-              
+
             const currentLucena = lucenaSnaps.length > 0 ? parseFloat(lucenaSnaps[0].prevailing_price) : 0;
             const currentLow = lucenaSnaps.length > 0 ? parseFloat(lucenaSnaps[0].price_min) : 0;
             const currentHigh = lucenaSnaps.length > 0 ? parseFloat(lucenaSnaps[0].price_max) : 0;
             const previousLucena = lucenaSnaps.length > 1 ? parseFloat(lucenaSnaps[1].prevailing_price) : currentLucena;
-            
+
             const regionalSnaps = commoditySnaps.filter((s: any) => s.survey_date === (lucenaSnaps[0]?.survey_date || commoditySnaps[0].survey_date));
             const regionalAvg = regionalSnaps.length > 0 ? regionalSnaps.reduce((acc: number, s: any) => acc + (parseFloat(s.prevailing_price) || 0), 0) / regionalSnaps.length : 0;
-            
+
             const weeklyChange = previousLucena > 0 ? ((currentLucena - previousLucena) / previousLucena) * 100 : 0;
             const status = currentLucena < regionalAvg ? 'below' : currentLucena > regionalAvg ? 'above' : 'near';
-            
+
             const sparkline = lucenaSnaps.slice(0, 7).map((s: any) => parseFloat(s.prevailing_price)).reverse();
             if (sparkline.length === 0) sparkline.push(parseFloat(currentLucena as any) || 0);
-            while(sparkline.length < 7 && sparkline.length > 0) sparkline.unshift(sparkline[0]);
+            while (sparkline.length < 7 && sparkline.length > 0) {
+              sparkline.unshift(sparkline[0]);
+            }
+
+            const historicalData = lucenaSnaps.slice(0, 14).reverse().map((s: any) => ({
+              date: new Date(s.survey_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+              price: parseFloat(s.prevailing_price)
+            }));
+            if (historicalData.length === 0) {
+              historicalData.push({ date: 'Today', price: currentLucena });
+            }
+
             const oldestLucena = lucenaSnaps.length > 1 ? parseFloat(lucenaSnaps[lucenaSnaps.length - 1].prevailing_price) : currentLucena;
             const monthlyChange = oldestLucena > 0 ? ((currentLucena - oldestLucena) / oldestLucena) * 100 : 0;
+
+            const recent30Snaps = lucenaSnaps.slice(0, 30);
+            const validPrices = recent30Snaps.map((s: any) => parseFloat(s.prevailing_price)).filter((p: number) => p > 0 && !isNaN(p));
+            const thirtyDayHigh = validPrices.length > 0 ? Math.max(...validPrices) : currentLucena;
+            const thirtyDayLow = validPrices.length > 0 ? Math.min(...validPrices) : currentLucena;
 
             return {
               id: cName.toLowerCase().replace(/\s+/g, '-'),
@@ -290,8 +387,11 @@ export default function LucenaDecisionSupport() {
               highPrice: currentHigh,
               regionalAvg: regionalAvg,
               weeklyChange: parseFloat(weeklyChange.toFixed(1)),
-              monthlyChange: parseFloat(monthlyChange.toFixed(1)), 
+              monthlyChange: parseFloat(monthlyChange.toFixed(1)),
               sparkline: sparkline,
+              historicalData: historicalData,
+              thirtyDayHigh,
+              thirtyDayLow,
               status: status,
               type: commoditySnaps[0].category_name?.toLowerCase() || 'staple',
               category: commoditySnaps[0].category_name || 'Uncategorized'
@@ -301,19 +401,68 @@ export default function LucenaDecisionSupport() {
           if (liveStaples.length > 0) {
             setStaples(liveStaples);
             setActiveCommodity(liveStaples[0]);
-            
+
             // Extract unique categories
             const fetchedCategories = Array.from(new Set(liveStaples.map(s => s.category)));
             setCategories(['All', ...fetchedCategories]);
-            
+
             // Initialize active recipe
             setActiveRecipe(RECIPES[0]);
+
+            // Generate dynamic market intelligence alerts based on real data
+            const newAlerts = [];
+
+            // Biggest price increase
+            const biggestIncrease = [...liveStaples].filter(s => s.weeklyChange > 0).sort((a, b) => b.weeklyChange - a.weeklyChange)[0];
+            if (biggestIncrease) {
+              newAlerts.push({
+                icon: <TrendingUp size={16} color="#DC2626" />,
+                text: `${biggestIncrease.name} prices increased by ${biggestIncrease.weeklyChange}% this week.`
+              });
+            }
+
+            // Biggest price drop
+            const biggestDrop = [...liveStaples].filter(s => s.weeklyChange < 0).sort((a, b) => a.weeklyChange - b.weeklyChange)[0];
+            if (biggestDrop) {
+              newAlerts.push({
+                icon: <TrendingDown size={16} color="#16A34A" />,
+                text: `${biggestDrop.name} dropped by ${Math.abs(biggestDrop.weeklyChange)}% compared to the last survey.`
+              });
+            }
+
+            // Stable commodity
+            const stable = liveStaples.find(s => s.weeklyChange === 0);
+            if (stable) {
+              newAlerts.push({
+                icon: <Minus size={16} color="#4B5563" />,
+                text: `${stable.name} remains stable since the last survey.`
+              });
+            }
+
+            // High monthly price
+            const highestMonth = [...liveStaples].filter(s => s.monthlyChange > 0).sort((a, b) => b.monthlyChange - a.monthlyChange)[0];
+            if (highestMonth && highestMonth.name !== biggestIncrease?.name) {
+              newAlerts.push({
+                icon: <AlertCircle size={16} color="#DC2626" />,
+                text: `${highestMonth.name} reached a high price this month, up ${highestMonth.monthlyChange}% overall.`
+              });
+            }
+
+            if (newAlerts.length > 0) {
+              setAlerts(newAlerts);
+            }
           }
+
+          const latestSurveyDate = apiSnapshots.length > 0 ? apiSnapshots[0].survey_date : null;
 
           const liveMarkets = apiMarkets
             .filter((m: any) => !m.name.toLowerCase().includes('lucena') && !m.name.toLowerCase().includes('calabarzon'))
-            .map((m: any) => ({ id: m.id.toString(), name: m.name }));
-            
+            .map((m: any) => {
+              const marketSnaps = apiSnapshots.filter((s: any) => s.market === m.id && s.survey_date === latestSurveyDate);
+              const basketCost = marketSnaps.reduce((acc: number, s: any) => acc + (parseFloat(s.prevailing_price) || 0), 0);
+              return { id: m.id.toString(), name: m.name, basketCost };
+            });
+
           setMarketsData(liveMarkets);
           if (liveMarkets.length > 0) {
             setCompareTarget(liveMarkets[0].id);
@@ -341,7 +490,7 @@ export default function LucenaDecisionSupport() {
     const breakdown = recipe.ingredients.map(ing => {
       let lucenaPrice = 0;
       let regionalPrice = 0;
-      
+
       if (ing.isPantryStaple) {
         lucenaPrice = ing.fixedCost || 0;
         regionalPrice = ing.fixedCost || 0;
@@ -356,7 +505,7 @@ export default function LucenaDecisionSupport() {
           regionalPrice = lucenaPrice;
         }
       }
-      
+
       lucenaTotal += lucenaPrice;
       compareTotal += regionalPrice;
 
@@ -374,20 +523,31 @@ export default function LucenaDecisionSupport() {
 
   // Generate Comparison Insight
   const generateComparisonInsight = () => {
-    if (compareTarget === 'tanza') return "Tanza currently offers cheaper vegetables and pork. Lucena remains competitive on fish and rice. Overall advantage leans slightly to Tanza.";
-    return "Lucena outperforms this market heavily in staples and protein. Overall consumer advantage: Lucena.";
+    const targetMarket = marketsData.find(m => m.id === compareTarget);
+    if (!targetMarket || !targetMarket.basketCost) return "Select a market to compare prices.";
+
+    const lucenaBasketCost = staples.reduce((acc, s) => acc + s.price, 0);
+    const diff = targetMarket.basketCost - lucenaBasketCost;
+
+    if (Math.abs(diff) < 5) {
+      return `Prices in Lucena are practically identical to ${targetMarket.name} today.`;
+    } else if (diff > 0) {
+      return `Good news! A basket of basic goods in Lucena is currently cheaper by ₱${diff.toFixed(2)} compared to ${targetMarket.name}.`;
+    } else {
+      return `A basket of basic goods in Lucena is currently higher by ₱${Math.abs(diff).toFixed(2)} compared to ${targetMarket.name}.`;
+    }
   };
 
   // Generate Budget Plan
   const calculateBudget = () => {
     const b = parseFloat(budget);
     if (isNaN(b) || b < 50) return;
-    
+
     // Recommend recipes that fit budget
     const affordable = RECIPES.map(r => {
       const cost = getRecipeCost(r).lucenaTotal;
       return { recipe: r, cost };
-    }).filter(r => r.cost <= b).sort((a,b) => b.cost - a.cost);
+    }).filter(r => r.cost <= b).sort((a, b) => b.cost - a.cost);
 
     if (affordable.length > 0) {
       setBudgetResult({
@@ -409,10 +569,17 @@ export default function LucenaDecisionSupport() {
     const cost = getRecipeCost(r);
     return { recipe: r, ...cost };
   }).sort((a, b) => a.lucenaTotal - b.lucenaTotal);
-  
+
   const cheapestUlam = ulamRankings[0];
   const expensiveUlam = ulamRankings[ulamRankings.length - 1];
   const bestValueUlam = ulamRankings.slice().sort((a, b) => b.savings - a.savings)[0];
+
+  // Get Today's Best Deals
+  const bestDealsList = staples
+    .filter(s => s.regionalAvg > 0)
+    .map(s => ({ ...s, savingsPercent: ((s.regionalAvg - s.price) / s.regionalAvg) * 100 }))
+    .sort((a, b) => b.savingsPercent - a.savingsPercent)
+    .slice(0, 3);
 
   return (
     <div style={{ minHeight: "100vh", background: "#F8FAFC", fontFamily: "var(--font-sans)", color: "var(--text-primary)" }}>
@@ -440,7 +607,7 @@ export default function LucenaDecisionSupport() {
               <div style={{ fontSize: "11px", color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "1px", fontWeight: 700 }}>Lucena Consumer Platform</div>
             </div>
           </div>
-          
+
           <button className="mobile-menu-btn" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} aria-label="Toggle Menu">
             {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -491,13 +658,13 @@ export default function LucenaDecisionSupport() {
           </span>
           <div style={{ flex: 1, position: "relative", height: "20px", overflow: "hidden", display: "flex", alignItems: "center", maskImage: "linear-gradient(to right, transparent, black 10px, black calc(100% - 10px), transparent)", WebkitMaskImage: "-webkit-linear-gradient(left, transparent, black 10px, black calc(100% - 10px), transparent)", width: "100%" }}>
             <div className="marquee-content" style={{ display: "flex", gap: "var(--space-10)", animation: "marquee 30s linear infinite", whiteSpace: "nowrap", paddingLeft: "var(--space-4)" }}>
-              {ALERTS.map((a, i) => (
+              {alerts.map((a, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-sm)", opacity: 0.9 }}>
                   {a.icon} <span>{a.text}</span>
                 </div>
               ))}
               {/* Duplicate for seamless loop */}
-              {ALERTS.map((a, i) => (
+              {alerts.map((a, i) => (
                 <div key={`dup-${i}`} style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-sm)", opacity: 0.9 }}>
                   {a.icon} <span>{a.text}</span>
                 </div>
@@ -529,33 +696,33 @@ export default function LucenaDecisionSupport() {
           background: "linear-gradient(135deg, rgba(17, 41, 107, 0.85) 0%, rgba(255, 203, 5, 0.4) 100%)",
           zIndex: 1
         }}></div>
-        
+
         <div style={{ position: "relative", zIndex: 2, padding: "0 var(--space-6)", maxWidth: "800px" }}>
-          <div style={{ 
-            display: "inline-block", 
-            background: "rgba(255, 203, 5, 0.2)", 
-            backdropFilter: "blur(4px)", 
-            padding: "6px 16px", 
-            borderRadius: "var(--radius-full)", 
+          <div style={{
+            display: "inline-block",
+            background: "rgba(255, 203, 5, 0.2)",
+            backdropFilter: "blur(4px)",
+            padding: "6px 16px",
+            borderRadius: "var(--radius-full)",
             border: "1px solid rgba(255, 203, 5, 0.5)",
-            color: "var(--color-primary)", 
-            fontWeight: 800, 
-            fontSize: "12px", 
-            textTransform: "uppercase", 
+            color: "var(--color-primary)",
+            fontWeight: 800,
+            fontSize: "12px",
+            textTransform: "uppercase",
             letterSpacing: "1px",
             marginBottom: "var(--space-4)"
           }}>
             Welcome to Lucena Public Market
           </div>
           <h1 style={{ color: "white", fontSize: "clamp(32px, 5vw, 56px)", fontWeight: 900, lineHeight: 1.1, marginBottom: "var(--space-4)", letterSpacing: "-1px", textShadow: "0 2px 10px rgba(0,0,0,0.3)" }}>
-            Freshness You Can Trust,<br/>Prices You Can Verify.
+            Freshness You Can Trust,<br />Prices You Can Verify.
           </h1>
           <p style={{ color: "white", fontSize: "clamp(16px, 2vw, 20px)", opacity: 0.9, marginBottom: "var(--space-6)", fontWeight: 500, textShadow: "0 1px 4px rgba(0,0,0,0.2)" }}>
             Explore today's best deals, navigate stalls instantly, and ensure fair pricing.
           </p>
-          
+
           <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
-            <button 
+            <button
               onClick={() => document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth' })}
               style={{ background: "var(--color-primary)", color: "var(--color-accent)", padding: "14px 28px", borderRadius: "var(--radius-full)", fontWeight: 800, fontSize: "16px", transition: "transform 0.2s, box-shadow 0.2s", boxShadow: "0 4px 15px rgba(255, 203, 5, 0.4)" }}
               onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
@@ -563,7 +730,7 @@ export default function LucenaDecisionSupport() {
             >
               Shop Today's Deals
             </button>
-            <button 
+            <button
               onClick={() => document.getElementById('market-navigator')?.scrollIntoView({ behavior: 'smooth' })}
               style={{ background: "rgba(255,255,255,0.1)", backdropFilter: "blur(8px)", color: "white", border: "1px solid rgba(255,255,255,0.3)", padding: "14px 28px", borderRadius: "var(--radius-full)", fontWeight: 800, fontSize: "16px", transition: "background 0.2s" }}
               onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
@@ -576,7 +743,7 @@ export default function LucenaDecisionSupport() {
       </div>
 
       <main style={{ maxWidth: 1400, margin: "0 auto", padding: "var(--space-8) var(--space-6)" }}>
-        
+
         {/* ANNOUNCEMENTS: All at Once Grid */}
         {announcements.length > 0 && (() => {
           const priorityConfig: Record<string, { bg: string; border: string; badge: string; icon: any; label: string }> = {
@@ -655,7 +822,7 @@ export default function LucenaDecisionSupport() {
           );
         })()}
 
-        
+
         {/* Section 1: Today's Lucena Market Snapshot */}
         <div style={{ marginBottom: "var(--space-10)" }}>
           <div style={{ marginBottom: "var(--space-4)" }}>
@@ -663,19 +830,19 @@ export default function LucenaDecisionSupport() {
               <h2 style={{ fontSize: "var(--text-2xl)", fontWeight: 800, color: "var(--color-accent)", margin: 0 }}>Today's Lucena Market</h2>
               <span style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)", fontWeight: 600 }}>Live Affordability Indicators</span>
             </div>
-            
+
             {/* Visual Category Navigation */}
             <div id="categories" style={{ position: "relative", display: "flex", alignItems: "center", margin: "0 -8px", padding: "0 8px", marginBottom: "var(--space-6)" }}>
-              <button 
-                onClick={() => document.getElementById('category-scroll')?.scrollBy({ left: -300, behavior: 'smooth' })} 
+              <button
+                onClick={() => document.getElementById('category-scroll')?.scrollBy({ left: -300, behavior: 'smooth' })}
                 style={{ position: "absolute", left: -8, zIndex: 10, background: "white", border: "1px solid #E5E7EB", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
               >
                 <ChevronLeft size={20} color="var(--text-secondary)" />
               </button>
 
-              <div id="category-scroll" className="category-scroll-container" style={{ 
-                display: "flex", 
-                gap: "var(--space-4)", 
+              <div id="category-scroll" className="category-scroll-container" style={{
+                display: "flex",
+                gap: "var(--space-4)",
                 padding: "8px 20px",
                 overflowX: "auto",
                 scrollbarWidth: "none",
@@ -690,10 +857,10 @@ export default function LucenaDecisionSupport() {
                   else if (cat.toLowerCase().includes('staple') || cat.toLowerCase().includes('rice') || cat.toLowerCase().includes('corn') || cat.toLowerCase().includes('grain')) bgImage = "url('/images/cat_staple.png')";
 
                   return (
-                    <button 
-                      key={cat} 
+                    <button
+                      key={cat}
                       onClick={() => handleCategoryChange(cat)}
-                      style={{ 
+                      style={{
                         position: "relative",
                         width: "160px",
                         height: "100px",
@@ -716,16 +883,16 @@ export default function LucenaDecisionSupport() {
                 })}
               </div>
 
-              <button 
-                onClick={() => document.getElementById('category-scroll')?.scrollBy({ left: 300, behavior: 'smooth' })} 
+              <button
+                onClick={() => document.getElementById('category-scroll')?.scrollBy({ left: 300, behavior: 'smooth' })}
                 style={{ position: "absolute", right: -8, zIndex: 10, background: "white", border: "1px solid #E5E7EB", borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
               >
                 <ChevronRight size={20} color="var(--text-secondary)" />
               </button>
             </div>
           </div>
-          
-          <div style={{ display: "flex", gap: "var(--space-4)", flexWrap: "wrap" }}>
+
+          <div style={{ display: "grid", gridTemplateColumns: isMobileGrid ? "repeat(2, 1fr)" : "repeat(auto-fill, minmax(200px, 1fr))", gap: "var(--space-4)" }}>
             {(() => {
               const filteredStaples = activeCategory === 'All' ? staples : staples.filter(s => s.category === activeCategory || s.type === activeCategory.toLowerCase());
               const totalPages = Math.ceil(filteredStaples.length / itemsPerPage);
@@ -733,68 +900,68 @@ export default function LucenaDecisionSupport() {
               return (
                 <>
                   {paginatedStaples.map(item => (
-              <div key={item.id} className="card" style={{ padding: "var(--space-5)", display: "flex", flexDirection: "column", borderTop: `4px solid ${item.price === 0 ? '#9CA3AF' : item.status === 'below' ? '#16A34A' : item.status === 'above' ? '#DC2626' : '#EAB308'}`, width: "200px", flexShrink: 0 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "var(--space-2)" }}>
-                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "var(--text-secondary)" }}>{item.name}</div>
-                  <Bookmark size={16} color="var(--text-muted)" style={{ cursor: "pointer" }} />
-                </div>
-                
-                <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-2)", marginBottom: "var(--space-1)", flexWrap: "wrap" }}>
-                  <span style={{ fontSize: "var(--text-4xl)", fontWeight: 900, color: "var(--color-accent)", letterSpacing: "-1.5px" }}>{item.price > 0 ? `₱${item.price}` : "N/A"}</span>
-                  {(item.lowPrice > 0 && item.highPrice > 0 && item.lowPrice !== item.highPrice) && (
-                    <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>
-                      (₱{item.lowPrice} - ₱{item.highPrice})
-                    </span>
-                  )}
-                </div>
-                
-                {/* Affordability Badge */}
-                {item.price > 0 ? (
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: item.status === 'below' ? '#F0FDF4' : item.status === 'above' ? '#FEF2F2' : '#FEFCE8', color: item.status === 'below' ? '#166534' : item.status === 'above' ? '#7F1D1D' : '#854D0E', padding: "4px 8px", borderRadius: 4, fontSize: "11px", fontWeight: 700, textTransform: "uppercase", marginBottom: "var(--space-4)", alignSelf: "flex-start" }}>
-                    <div style={{ width: 6, height: 6, borderRadius: 3, background: item.status === 'below' ? '#16A34A' : item.status === 'above' ? '#DC2626' : '#EAB308' }} />
-                    {item.status === 'below' ? 'Lower than Avg' : item.status === 'above' ? 'Higher than Avg' : 'Near Average'}
-                  </div>
-                ) : (
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: '#F3F4F6', color: '#4B5563', padding: "4px 8px", borderRadius: 4, fontSize: "11px", fontWeight: 700, textTransform: "uppercase", marginBottom: "var(--space-4)", alignSelf: "flex-start" }}>
-                    <div style={{ width: 6, height: 6, borderRadius: 3, background: '#9CA3AF' }} />
-                    No Data Today
-                  </div>
-                )}
+                    <div key={item.id} className="card" style={{ padding: "12px", display: "flex", flexDirection: "column", borderTop: `4px solid ${item.price === 0 ? '#9CA3AF' : item.status === 'below' ? '#16A34A' : item.status === 'above' ? '#DC2626' : '#EAB308'}`, flexShrink: 0 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
+                        <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-secondary)", lineHeight: 1.2 }}>{item.name}</div>
+                        <Bookmark size={14} color="var(--text-muted)" style={{ cursor: "pointer", flexShrink: 0, marginLeft: 4 }} />
+                      </div>
 
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-xs)", fontWeight: 600, color: "var(--text-muted)", marginBottom: "var(--space-2)" }}>
-                  <span>1W: <span style={{ color: item.weeklyChange > 0 ? '#DC2626' : '#16A34A' }}>{item.weeklyChange > 0 ? '+' : ''}{item.weeklyChange}%</span></span>
-                  <span>1M: <span style={{ color: item.monthlyChange > 0 ? '#DC2626' : '#16A34A' }}>{item.monthlyChange > 0 ? '+' : ''}{item.monthlyChange}%</span></span>
-                </div>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginBottom: "4px", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "var(--text-3xl)", fontWeight: 900, color: "var(--color-accent)", letterSpacing: "-1px" }}>{item.price > 0 ? `₱${item.price}` : "N/A"}</span>
+                        {(item.lowPrice > 0 && item.highPrice > 0 && item.lowPrice !== item.highPrice) && (
+                          <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>
+                            (₱{item.lowPrice} - ₱{item.highPrice})
+                          </span>
+                        )}
+                      </div>
 
-                <div style={{ height: 40, width: "100%", marginTop: "auto" }}>
-                  {isMounted ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={item.sparkline.map((v: number, i: number) => ({ val: v, idx: i }))}>
-                      <Line type="monotone" dataKey="val" stroke={item.status === 'above' ? '#DC2626' : item.status === 'below' ? '#16A34A' : '#EAB308'} strokeWidth={2} dot={false} isAnimationActive={false} />
-                      <YAxis domain={['dataMin - 5', 'dataMax + 5']} hide />
-                    </LineChart>
-                  </ResponsiveContainer>
-                  ) : <div style={{ height: "100%", width: "100%" }} />}
-                </div>
+                      {/* Affordability Badge */}
+                      {item.price > 0 ? (
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: item.status === 'below' ? '#F0FDF4' : item.status === 'above' ? '#FEF2F2' : '#FEFCE8', color: item.status === 'below' ? '#166534' : item.status === 'above' ? '#7F1D1D' : '#854D0E', padding: "2px 6px", borderRadius: 4, fontSize: "10px", fontWeight: 700, textTransform: "uppercase", marginBottom: "8px", alignSelf: "flex-start" }}>
+                          <div style={{ width: 6, height: 6, borderRadius: 3, background: item.status === 'below' ? '#16A34A' : item.status === 'above' ? '#DC2626' : '#EAB308' }} />
+                          {item.status === 'below' ? 'Lower than Avg' : item.status === 'above' ? 'Higher than Avg' : 'Near Average'}
+                        </div>
+                      ) : (
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: '#F3F4F6', color: '#4B5563', padding: "2px 6px", borderRadius: 4, fontSize: "10px", fontWeight: 700, textTransform: "uppercase", marginBottom: "8px", alignSelf: "flex-start" }}>
+                          <div style={{ width: 6, height: 6, borderRadius: 3, background: '#9CA3AF' }} />
+                          No Data Today
+                        </div>
+                      )}
 
-                <button 
-                  style={{ marginTop: "var(--space-3)", width: "100%", padding: "8px", background: "#F3F4F6", color: "var(--text-primary)", border: "none", borderRadius: "6px", fontWeight: 700, fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
-                  onClick={() => {
-                    const catMatches = mapStalls.filter(s => s.category.toLowerCase().includes(item.type.toLowerCase()) || s.category.toLowerCase().includes(item.category.toLowerCase()));
-                    setMapSearch(item.name);
-                    if (catMatches.length > 0) {
-                      setSelectedMapStallId(catMatches[0].id);
-                    } else {
-                      setSelectedMapStallId(null);
-                    }
-                    setHighlightedMapStallIds([]);
-                    setNavigationRoute(null);
-                    document.getElementById('market-navigator')?.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                >
-                  <MapPin size={14} /> Find in Market
-                </button>
-              </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", marginBottom: "4px" }}>
+                        <span>1W: <span style={{ color: item.weeklyChange > 0 ? '#DC2626' : '#16A34A' }}>{item.weeklyChange > 0 ? '+' : ''}{item.weeklyChange}%</span></span>
+                        <span>1M: <span style={{ color: item.monthlyChange > 0 ? '#DC2626' : '#16A34A' }}>{item.monthlyChange > 0 ? '+' : ''}{item.monthlyChange}%</span></span>
+                      </div>
+
+                      <div style={{ height: 28, width: "100%", marginTop: "auto" }}>
+                        {isMounted ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={item.sparkline.map((v: number, i: number) => ({ val: v, idx: i }))}>
+                              <Line type="monotone" dataKey="val" stroke={item.status === 'above' ? '#DC2626' : item.status === 'below' ? '#16A34A' : '#EAB308'} strokeWidth={2} dot={false} isAnimationActive={false} />
+                              <YAxis domain={['dataMin - 5', 'dataMax + 5']} hide />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        ) : <div style={{ height: "100%", width: "100%" }} />}
+                      </div>
+
+                      <button
+                        style={{ marginTop: "8px", width: "100%", padding: "6px", background: "#F3F4F6", color: "var(--text-primary)", border: "none", borderRadius: "6px", fontWeight: 700, fontSize: "11px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                        onClick={() => {
+                          const catMatches = mapStalls.filter(s => s.category.toLowerCase().includes(item.type.toLowerCase()) || s.category.toLowerCase().includes(item.category.toLowerCase()));
+                          setMapSearch(item.name);
+                          if (catMatches.length > 0) {
+                            setSelectedMapStallId(catMatches[0].id);
+                          } else {
+                            setSelectedMapStallId(null);
+                          }
+                          setHighlightedMapStallIds([]);
+                          setNavigationRoute(null);
+                          document.getElementById('market-navigator')?.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                      >
+                        <MapPin size={14} /> Find in Market
+                      </button>
+                    </div>
                   ))}
                 </>
               );
@@ -808,14 +975,14 @@ export default function LucenaDecisionSupport() {
             if (totalPages > 1) {
               return (
                 <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "var(--space-2)", marginTop: "var(--space-6)", flexWrap: "wrap" }}>
-                  <button 
-                    disabled={currentPage === 1} 
+                  <button
+                    disabled={currentPage === 1}
                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                     style={{ padding: "8px 16px", borderRadius: "var(--radius-md)", border: "1px solid #E2E8F0", background: currentPage === 1 ? "#F3F4F6" : "white", color: currentPage === 1 ? "#9CA3AF" : "var(--text-primary)", cursor: currentPage === 1 ? "not-allowed" : "pointer", fontWeight: 700, fontSize: "var(--text-sm)", transition: "all 0.2s" }}
                   >
                     Prev
                   </button>
-                  
+
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
                     <button
                       key={page}
@@ -841,8 +1008,8 @@ export default function LucenaDecisionSupport() {
                     </button>
                   ))}
 
-                  <button 
-                    disabled={currentPage === totalPages} 
+                  <button
+                    disabled={currentPage === totalPages}
                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                     style={{ padding: "8px 16px", borderRadius: "var(--radius-md)", border: "1px solid #E2E8F0", background: currentPage === totalPages ? "#F3F4F6" : "white", color: currentPage === totalPages ? "#9CA3AF" : "var(--text-primary)", cursor: currentPage === totalPages ? "not-allowed" : "pointer", fontWeight: 700, fontSize: "var(--text-sm)", transition: "all 0.2s" }}
                   >
@@ -855,23 +1022,25 @@ export default function LucenaDecisionSupport() {
           })()}
         </div>
         {/* NEW SECTION: Market Navigator */}
-        <div id="market-navigator" style={{ position: "relative", width: "100%", height: "80vh", minHeight: "600px", borderRadius: "var(--radius-lg)", border: "1px solid #E2E8F0", background: "#F8FAFC", marginBottom: "var(--space-10)", overflow: "hidden" }}>
-          
+        <div id="market-navigator" className="mobile-map-container" style={{ position: "relative", width: "100%", height: "80vh", minHeight: "600px", borderRadius: "var(--radius-lg)", border: "1px solid #E2E8F0", background: "#F8FAFC", marginBottom: "var(--space-10)", overflow: "hidden" }}>
+
           {/* Map Background */}
           <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
-            <MarketMap 
-              stalls={mapStalls} 
-              selectedStallId={selectedMapStallId} 
+            <MarketMap
+              stalls={mapStalls}
+              selectedStallId={selectedMapStallId}
               highlightedStallIds={highlightedMapStallIds}
               navigationRoute={navigationRoute}
               onStallSelect={(s) => setSelectedMapStallId(s ? s.id : null)}
               onGetDirections={(stall) => {
+                const stallCanvas = toCanvasCoords(stall);
+                const entrance = getClosestEntrance(stallCanvas.x, stallCanvas.y);
                 setNavigationRoute({
                   points: [
-                    { x: 3900, y: 4900, label: "Entrance" },
-                    { x: stall.svg_x, y: stall.svg_y, label: `Stall ${stall.number} (${stall.vendor})` }
+                    { x: entrance.x, y: entrance.y, label: entrance.label },
+                    { x: stallCanvas.x, y: stallCanvas.y, label: `Stall ${stall.number}` }
                   ],
-                  totalDistanceMeters: Math.floor(Math.sqrt(Math.pow(stall.svg_x - 3900, 2) + Math.pow(stall.svg_y - 4900, 2)) / 50)
+                  totalDistanceMeters: Math.floor(Math.sqrt(Math.pow(stallCanvas.x - entrance.x, 2) + Math.pow(stallCanvas.y - entrance.y, 2)) / 50)
                 });
               }}
               showAdminLayers={false}
@@ -883,13 +1052,13 @@ export default function LucenaDecisionSupport() {
 
           {/* Floating Google-Maps Style UI Container */}
           <div style={{ position: "absolute", top: "24px", left: "24px", zIndex: 10, width: "380px", maxWidth: "calc(100% - 48px)", display: "flex", flexDirection: "column", gap: "12px", maxHeight: "calc(100% - 48px)", pointerEvents: "none" }}>
-            
+
             {/* Search Box */}
             <div style={{ pointerEvents: "auto", background: "white", borderRadius: "var(--radius-full)", padding: "12px 20px", display: "flex", alignItems: "center", gap: "12px", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "1px solid #E2E8F0" }}>
               <Search size={20} color="var(--text-muted)" />
-              <input 
-                type="text" 
-                placeholder="Search stalls or vendors..." 
+              <input
+                type="text"
+                placeholder="Search stalls or products..."
                 value={mapSearch}
                 onChange={(e) => setMapSearch(e.target.value)}
                 style={{ flex: 1, border: "none", outline: "none", fontSize: "15px", fontWeight: 600, background: "transparent" }}
@@ -905,43 +1074,44 @@ export default function LucenaDecisionSupport() {
               .floating-results::-webkit-scrollbar { width: 6px; }
               .floating-results::-webkit-scrollbar-track { background: transparent; }
               .floating-results::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
+              @media (max-width: 768px) {
+                .hide-on-mobile { display: none !important; }
+                .mobile-map-container { height: 90vh !important; min-height: 500px !important; border-radius: 0 !important; border-left: none !important; border-right: none !important; }
+              }
             `}</style>
 
             <div className="floating-results" style={{ pointerEvents: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "12px", overflowY: "auto", paddingRight: "4px" }}>
               {navigationRoute && (
-                <div style={{ background: "white", padding: "16px", borderRadius: "var(--radius-lg)", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "2px solid #10B981", flexShrink: 0 }}>
-                  <div style={{ fontSize: "11px", fontWeight: 800, color: "#166534", textTransform: "uppercase", marginBottom: "8px" }}>Recommended Route</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "13px", fontWeight: 600, color: "#14532D" }}>
-                    {navigationRoute.points.map((p, i) => (
-                      <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <div style={{ width: 8, height: 8, borderRadius: 4, background: i === 0 ? "#10B981" : "#EF4444" }} />
-                          {p.label}
-                        </div>
-                        {i < navigationRoute.points.length - 1 && (
-                          <div style={{ paddingLeft: 3, margin: "2px 0", color: "#86EFAC" }}>↓</div>
-                        )}
+                <div style={{ background: "white", padding: "12px", borderRadius: "var(--radius-lg)", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "2px solid #10B981", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                    <div style={{ fontSize: "10px", fontWeight: 800, color: "#166534", textTransform: "uppercase" }}>Recommended Route</div>
+                    <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "6px", fontSize: "13px", fontWeight: 700, color: "#14532D" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" }}>
+                        <div style={{ width: 8, height: 8, borderRadius: 4, background: "#10B981" }} />
+                        {navigationRoute.points[0].label}
                       </div>
-                    ))}
+                      <span style={{ color: "#86EFAC" }}>➔</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" }}>
+                        <div style={{ width: 8, height: 8, borderRadius: 4, background: "#EF4444" }} />
+                        {navigationRoute.points[navigationRoute.points.length - 1].label}
+                      </div>
+                      <span style={{ fontSize: "11px", color: "#166534", fontWeight: 800, marginLeft: "4px", padding: "2px 6px", background: "#D1FAE5", borderRadius: "100px", whiteSpace: "nowrap" }}>
+                        ~{navigationRoute.totalDistanceMeters}m
+                      </span>
+                    </div>
                   </div>
-                  <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px dashed #BBF7D0", fontSize: "12px", fontWeight: 700, color: "#166534", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span>Est. Walking Distance: ~{navigationRoute.totalDistanceMeters}m</span>
-                    <button onClick={() => setNavigationRoute(null)} style={{ background: "#FEE2E2", color: "#DC2626", border: "none", borderRadius: "var(--radius-full)", padding: "4px 12px", fontSize: "11px", cursor: "pointer", fontWeight: 800 }}>Clear</button>
-                  </div>
+                  <button onClick={() => setNavigationRoute(null)} style={{ background: "#FEE2E2", color: "#DC2626", border: "none", borderRadius: "50%", width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                    <X size={14} strokeWidth={3} />
+                  </button>
                 </div>
               )}
 
               {/* Map Search Results - show if searching or selected */}
               {(() => {
                 const query = mapSearch.toLowerCase();
-                if (!query && !selectedMapStallId) return null;
-                
-                let results = mapStalls;
-                if (query) {
-                  results = mapStalls.filter(s => s.vendor.toLowerCase().includes(query) || s.category.toLowerCase().includes(query) || s.number.toLowerCase().includes(query));
-                } else if (selectedMapStallId) {
-                  results = mapStalls.filter(s => s.id === selectedMapStallId);
-                }
+                if (!query) return null; // Do not show anything if not searching! The bubble handles selected stalls.
+
+                let results = mapStalls.filter(s => s.category.toLowerCase().includes(query) || s.number.toLowerCase().includes(query));
 
                 if (results.length === 0) return (
                   <div style={{ background: "white", padding: "16px", borderRadius: "var(--radius-lg)", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "1px solid #E2E8F0", fontSize: "14px", color: "var(--text-muted)", textAlign: "center", fontWeight: 600 }}>
@@ -952,20 +1122,23 @@ export default function LucenaDecisionSupport() {
                 return results.slice(0, query ? 10 : 1).map(stall => (
                   <div key={stall.id} style={{ padding: "16px", background: "white", borderRadius: "var(--radius-lg)", border: selectedMapStallId === stall.id ? "2px solid var(--color-primary)" : "1px solid #E2E8F0", cursor: "pointer", flexShrink: 0, boxShadow: "0 8px 30px rgba(0,0,0,0.08)", transition: "all 0.2s" }} onClick={() => setSelectedMapStallId(stall.id)}>
                     <div style={{ fontSize: "12px", fontWeight: 800, color: "var(--color-primary)", marginBottom: 4 }}>STALL {stall.number}</div>
-                    <div style={{ fontSize: "16px", fontWeight: 800, color: "var(--text-primary)", marginBottom: 8 }}>{stall.vendor !== "—" ? stall.vendor : "Vacant Stall"}</div>
+                    <div style={{ fontSize: "16px", fontWeight: 800, color: "var(--text-primary)", marginBottom: 8 }}>{stall.vendor !== "—" && stall.vendor !== "Vacant" ? "Registered Vendor" : "Vacant Stall"}</div>
                     <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: 4 }}><span style={{ fontWeight: 700 }}>Category:</span> {stall.category}</div>
                     <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: 12 }}><span style={{ fontWeight: 700 }}>Products:</span> Assorted {stall.category.toLowerCase()}</div>
                     <div style={{ display: "flex", gap: "8px" }}>
                       <button className="btn btn-primary" style={{ flex: 1, padding: "8px", fontSize: "12px", display: "flex", justifyContent: "center", alignItems: "center" }} onClick={(e) => { e.stopPropagation(); setSelectedMapStallId(stall.id); }}>
                         <MapPin size={14} style={{ marginRight: 6 }} /> Focus
                       </button>
-                      <button className="btn btn-ghost" style={{ padding: "8px", fontSize: "12px", background: "#F1F5F9", display: "flex", justifyContent: "center", alignItems: "center" }} onClick={(e) => { e.stopPropagation(); 
+                      <button className="btn btn-ghost" style={{ padding: "8px", fontSize: "12px", background: "#F1F5F9", display: "flex", justifyContent: "center", alignItems: "center" }} onClick={(e) => {
+                        e.stopPropagation();
+                        const stallCanvas = toCanvasCoords(stall);
+                        const entrance = getClosestEntrance(stallCanvas.x, stallCanvas.y);
                         setNavigationRoute({
                           points: [
-                            { x: 3900, y: 4900, label: "Entrance" },
-                            { x: stall.svg_x, y: stall.svg_y, label: `Stall ${stall.number} (${stall.vendor})` }
+                            { x: entrance.x, y: entrance.y, label: entrance.label },
+                            { x: stallCanvas.x, y: stallCanvas.y, label: `Stall ${stall.number}` }
                           ],
-                          totalDistanceMeters: Math.floor(Math.sqrt(Math.pow(stall.svg_x - 3900, 2) + Math.pow(stall.svg_y - 4900, 2)) / 50)
+                          totalDistanceMeters: Math.floor(Math.sqrt(Math.pow(stallCanvas.x - entrance.x, 2) + Math.pow(stallCanvas.y - entrance.y, 2)) / 50)
                         });
                       }}>
                         Directions
@@ -977,7 +1150,7 @@ export default function LucenaDecisionSupport() {
 
               {/* If no search, show a nice compact legend block */}
               {!mapSearch && !selectedMapStallId && !navigationRoute && (
-                <div style={{ background: "white", padding: "16px", borderRadius: "var(--radius-lg)", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "1px solid #E2E8F0", flexShrink: 0 }}>
+                <div className="hide-on-mobile" style={{ background: "white", padding: "16px", borderRadius: "var(--radius-lg)", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "1px solid #E2E8F0", flexShrink: 0 }}>
                   <div style={{ fontSize: "10px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "12px", display: "flex", alignItems: "center", gap: 6 }}>
                     <div style={{ width: 7, height: 7, borderRadius: 2, background: "var(--color-primary)" }} />
                     Map Legend
@@ -999,54 +1172,57 @@ export default function LucenaDecisionSupport() {
 
         {/* Multi-Column Layout for Middle Sections */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 400px), 1fr))", gap: "var(--space-8)", marginBottom: "var(--space-10)" }}>
-          
+
           {/* Left Column */}
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-8)" }}>
-            
+
             {/* Section 4: Lucena Price Fairness Index™ & Best Deals */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 350px), 1fr))", gap: "var(--space-6)", marginBottom: "var(--space-8)" }}>
-          
-          <div className="card" style={{ padding: "var(--space-6)", background: "linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)", border: "1px solid #E2E8F0", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)" }}>
-            <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", fontWeight: 800, color: "var(--text-muted)", letterSpacing: "1px", marginBottom: "var(--space-4)" }}>
-              Signature Metric
-            </div>
-            <div style={{ marginBottom: "var(--space-2)" }}>
-              <span style={{ fontSize: "64px", fontWeight: 900, color: "var(--color-accent)", lineHeight: 1, letterSpacing: "-2px" }}>87</span>
-              <span style={{ fontSize: "var(--text-xl)", color: "var(--text-muted)", fontWeight: 700 }}>/100</span>
-            </div>
-            <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "#16A34A", margin: "0 0 var(--space-1) 0" }}>Fair Market Pricing</h2>
-            <p style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
-              Lucena Prices Index™ indicates generally affordable staple goods and stable protein prices compared to the regional average, despite some volatility in vegetables.
-            </p>
-          </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 350px), 1fr))", gap: "var(--space-6)", marginBottom: "var(--space-8)" }}>
 
-          <div className="card" style={{ padding: "var(--space-6)" }}>
-            <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "var(--color-accent)", margin: "0 0 var(--space-4) 0", display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <Star size={18} color="var(--color-primary)" fill="var(--color-primary)" /> Best Deals Today (Lucena Rank)
-            </h2>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "var(--space-4)" }}>
-              <div style={{ padding: "var(--space-4)", background: "#F0FDF4", borderRadius: "var(--radius-md)", borderLeft: "4px solid #16A34A" }}>
-                <div style={{ fontSize: "var(--text-xs)", color: "#166534", fontWeight: 700, textTransform: "uppercase" }}>🏆 #1 Cheapest</div>
-                <div style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: "#166534", marginTop: 4 }}>Tilapia</div>
-                <div style={{ fontSize: "var(--text-sm)", color: "#15803D", marginTop: 2 }}>in the Region</div>
+              <div className="card" style={{ padding: "var(--space-6)", background: "linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)", border: "1px solid #E2E8F0", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)" }}>
+                <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", fontWeight: 800, color: "var(--text-muted)", letterSpacing: "1px", marginBottom: "var(--space-4)" }}>
+                  Signature Metric
+                </div>
+                <div style={{ marginBottom: "var(--space-2)" }}>
+                  <span style={{ fontSize: "64px", fontWeight: 900, color: "var(--color-accent)", lineHeight: 1, letterSpacing: "-2px" }}>87</span>
+                  <span style={{ fontSize: "var(--text-xl)", color: "var(--text-muted)", fontWeight: 700 }}>/100</span>
+                </div>
+                <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "#16A34A", margin: "0 0 var(--space-1) 0" }}>Fair Market Pricing</h2>
+                <p style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
+                  Lucena Prices Index™ indicates generally affordable staple goods and stable protein prices compared to the regional average, despite some volatility in vegetables.
+                </p>
               </div>
-              <div style={{ padding: "var(--space-4)", background: "#EFF6FF", borderRadius: "var(--radius-md)", borderLeft: "4px solid #2563EB" }}>
-                <div style={{ fontSize: "var(--text-xs)", color: "#1E3A8A", fontWeight: 700, textTransform: "uppercase" }}>🏆 #2 Cheapest</div>
-                <div style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: "#1E3A8A", marginTop: 4 }}>Garlic</div>
-                <div style={{ fontSize: "var(--text-sm)", color: "#1D4ED8", marginTop: 2 }}>in the Region</div>
+
+              <div className="card" style={{ padding: "var(--space-6)" }}>
+                <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "var(--color-accent)", margin: "0 0 var(--space-4) 0", display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+                  <Star size={18} color="var(--color-primary)" fill="var(--color-primary)" /> Best Deals Today (Lucena Rank)
+                </h2>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "var(--space-4)" }}>
+                  {bestDealsList.length > 0 ? bestDealsList.map((deal, idx) => {
+                    const colors = [
+                      { bg: "#F0FDF4", border: "#16A34A", text: "#166534", sub: "#15803D" },
+                      { bg: "#EFF6FF", border: "#2563EB", text: "#1E3A8A", sub: "#1D4ED8" },
+                      { bg: "#FFFBEB", border: "#D97706", text: "#92400E", sub: "#B45309" }
+                    ];
+                    const c = colors[idx % 3];
+
+                    return (
+                      <div key={deal.id} style={{ padding: "var(--space-4)", background: c.bg, borderRadius: "var(--radius-md)", borderLeft: `4px solid ${c.border}`, transition: "transform 0.2s", cursor: "pointer" }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
+                        <div style={{ fontSize: "var(--text-xs)", color: c.text, fontWeight: 700, textTransform: "uppercase" }}>🏆 #{idx + 1} Cheapest</div>
+                        <div style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: c.text, marginTop: 4 }}>{deal.name}</div>
+                        <div style={{ fontSize: "var(--text-sm)", color: c.sub, marginTop: 2 }}>{deal.savingsPercent > 0 ? `${deal.savingsPercent.toFixed(0)}% below region` : 'in the Region'}</div>
+                      </div>
+                    );
+                  }) : (
+                    <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)", padding: "var(--space-4)" }}>Loading best deals...</div>
+                  )}
+                </div>
               </div>
-              <div style={{ padding: "var(--space-4)", background: "#FDF4FF", borderRadius: "var(--radius-md)", borderLeft: "4px solid #C026D3" }}>
-                <div style={{ fontSize: "var(--text-xs)", color: "#86198F", fontWeight: 700, textTransform: "uppercase" }}>🏆 #3 Cheapest</div>
-                <div style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: "#86198F", marginTop: 4 }}>Rice</div>
-                <div style={{ fontSize: "var(--text-sm)", color: "#A21CAF", marginTop: 2 }}>in the Region</div>
-              </div>
+
             </div>
-          </div>
-
-        </div>
 
 
-        {/* Section 2: Smart Ulam Calculator */}
+            {/* Section 2: Smart Ulam Calculator */}
             <div className="card" style={{ border: "1px solid var(--color-primary)" }}>
               <div className="card-header" style={{ background: "var(--color-primary-pale)", borderBottom: "1px solid #FDE047", padding: "var(--space-4) var(--space-5)" }}>
                 <h3 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "var(--color-accent)", margin: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" }}><ChefHat size={18} /> Smart Ulam Calculator</h3>
@@ -1054,24 +1230,40 @@ export default function LucenaDecisionSupport() {
               </div>
               <div className="card-body" style={{ padding: "var(--space-5)" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "var(--space-2)", marginBottom: "var(--space-6)" }}>
-                  {RECIPES.map(recipe => (
-                    <button 
-                      key={recipe.id}
-                      onClick={() => setActiveRecipe(recipe)}
-                      style={{
-                        padding: "8px", 
-                        background: activeRecipe?.id === recipe.id ? "var(--color-primary)" : "#F8FAFC", 
-                        border: activeRecipe?.id === recipe.id ? "2px solid var(--color-accent)" : "1px solid #E2E8F0",
-                        borderRadius: "var(--radius-md)",
-                        cursor: "pointer",
-                        display: "flex", flexDirection: "column", alignItems: "center", gap: "4px",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      <span style={{ fontSize: "24px" }}>{recipe.image}</span>
-                      <span style={{ fontSize: "11px", fontWeight: 700, color: activeRecipe?.id === recipe.id ? "var(--color-accent)" : "var(--text-secondary)", textAlign: "center", lineHeight: 1.2 }}>{recipe.name}</span>
-                    </button>
-                  ))}
+                  {RECIPES.map(recipe => {
+                    const bgImg = (() => {
+                      if (recipe.id.includes('sinigang')) return '/images/recipes/sinigang.jpg';
+                      if (recipe.id.includes('adobo')) return '/images/recipes/adobo.jpg';
+                      if (recipe.id.includes('tinola')) return '/images/recipes/tinola.jpg';
+                      if (recipe.id.includes('paksiw')) return '/images/recipes/paksiw.jpg';
+                      if (recipe.id.includes('pinakbet')) return '/images/recipes/pinakbet.jpg';
+                      if (recipe.id.includes('menudo')) return '/images/recipes/menudo.jpg';
+                      return '/images/recipes/sinigang.jpg';
+                    })();
+                    return (
+                      <button
+                        key={recipe.id}
+                        onClick={() => setActiveRecipe(recipe)}
+                        style={{
+                          position: "relative",
+                          height: "90px",
+                          borderRadius: "var(--radius-md)",
+                          border: activeRecipe?.id === recipe.id ? "3px solid var(--color-primary)" : "1px solid #E2E8F0",
+                          cursor: "pointer",
+                          overflow: "hidden",
+                          transition: "transform 0.2s, box-shadow 0.2s",
+                          boxShadow: activeRecipe?.id === recipe.id ? "0 4px 12px rgba(234,179,8,0.4)" : "none",
+                          transform: activeRecipe?.id === recipe.id ? "scale(1.02)" : "scale(1)"
+                        }}
+                      >
+                        <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${bgImg})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+                        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.1))" }} />
+                        <div style={{ position: "relative", height: "100%", padding: "8px", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+                          <span style={{ fontSize: "13px", fontWeight: 800, color: "white", textAlign: "center", lineHeight: 1.2, textShadow: "0 2px 4px rgba(0,0,0,0.8)", letterSpacing: "0.5px" }}>{recipe.name}</span>
+                        </div>
+                      </button>
+                    )
+                  })}
                 </div>
 
                 {activeRecipe && (
@@ -1080,7 +1272,7 @@ export default function LucenaDecisionSupport() {
                       <h4 style={{ margin: 0, fontSize: "var(--text-md)", fontWeight: 800, color: "var(--text-primary)" }}>{activeRecipe.name}</h4>
                       <div style={{ fontSize: "var(--text-xl)", fontWeight: 900, color: "var(--color-primary)" }}>₱{activeRecipeCost.lucenaTotal.toFixed(2)}</div>
                     </div>
-                    
+
                     <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", marginBottom: "var(--space-4)" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                         <span>Regional Average Cost:</span>
@@ -1109,37 +1301,58 @@ export default function LucenaDecisionSupport() {
                       ))}
                     </div>
 
-                    <button 
+                    <button
                       style={{ marginTop: "var(--space-4)", width: "100%", padding: "10px", background: "var(--color-primary)", color: "var(--color-accent)", border: "none", borderRadius: "6px", fontWeight: 800, fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                       onClick={() => {
-                        const ENTRANCE = { x: 3900, y: 4900, label: "Entrance" };
-                        let currentPos: { x: number, y: number } = ENTRANCE;
+                        // For recipes, just find the first ingredient's stall and use its closest entrance
+                        let currentPos: { x: number, y: number } | null = null;
+
+                        // First, find the first available stall for our ingredients to determine where to start
+                        for (const ing of activeRecipeCost.breakdown) {
+                          const matches = mapStalls.filter(s => s.category.toLowerCase().includes(ing.commodityName.toLowerCase()));
+                          if (matches.length > 0) {
+                            const canvasCoords = toCanvasCoords(matches[0]);
+                            const entrance = getClosestEntrance(canvasCoords.x, canvasCoords.y);
+                            currentPos = { x: entrance.x, y: entrance.y };
+                            break;
+                          }
+                        }
+
+                        if (!currentPos) return; // No ingredients found at all
+
                         let dist = 0;
+                        const entranceLabel = LANDMARKS.find(l => {
+                          const c = toCanvasCoords(l);
+                          return c.x === currentPos!.x && c.y === currentPos!.y;
+                        })?.label || "Entrance";
+
+                        const ENTRANCE = { x: currentPos.x, y: currentPos.y, label: entranceLabel };
                         const routePoints = [ENTRANCE];
                         const highlighted: string[] = [];
 
                         activeRecipeCost.breakdown.forEach(ing => {
                           const query = ing.commodityName.toLowerCase();
-                          // Find stalls that match this ingredient's category
-                          const matches = mapStalls.filter(s => s.category.toLowerCase().includes(query) || s.vendor.toLowerCase().includes(query));
+                          const matches = mapStalls.filter(s => s.category.toLowerCase().includes(query));
                           if (matches.length > 0) {
-                            // Find nearest matching stall to currentPos
                             const nearest = matches.reduce((prev, curr) => {
-                              const dPrev = Math.sqrt(Math.pow(prev.svg_x - currentPos.x, 2) + Math.pow(prev.svg_y - currentPos.y, 2));
-                              const dCurr = Math.sqrt(Math.pow(curr.svg_x - currentPos.x, 2) + Math.pow(curr.svg_y - currentPos.y, 2));
+                              const prevC = toCanvasCoords(prev);
+                              const currC = toCanvasCoords(curr);
+                              const dPrev = Math.sqrt(Math.pow(prevC.x - currentPos.x, 2) + Math.pow(prevC.y - currentPos.y, 2));
+                              const dCurr = Math.sqrt(Math.pow(currC.x - currentPos.x, 2) + Math.pow(currC.y - currentPos.y, 2));
                               return dCurr < dPrev ? curr : prev;
                             });
 
-                            dist += Math.floor(Math.sqrt(Math.pow(nearest.svg_x - currentPos.x, 2) + Math.pow(nearest.svg_y - currentPos.y, 2)) / 50);
-                            routePoints.push({ x: nearest.svg_x, y: nearest.svg_y, label: `${ing.commodityName} (Stall ${nearest.number})` });
+                            const nearestCanvas = toCanvasCoords(nearest);
+                            dist += Math.floor(Math.sqrt(Math.pow(nearestCanvas.x - currentPos.x, 2) + Math.pow(nearestCanvas.y - currentPos.y, 2)) / 50);
+                            routePoints.push({ x: nearestCanvas.x, y: nearestCanvas.y, label: `${ing.commodityName} (Stall ${nearest.number})` });
                             highlighted.push(nearest.id);
-                            currentPos = { x: nearest.svg_x, y: nearest.svg_y };
+                            currentPos = nearestCanvas;
                           }
                         });
 
                         setNavigationRoute({ points: routePoints, totalDistanceMeters: dist });
                         setHighlightedMapStallIds(highlighted);
-                        setMapSearch(""); // Clear search to show the route instructions
+                        setMapSearch("");
                         setSelectedMapStallId(null);
                         document.getElementById('market-navigator')?.scrollIntoView({ behavior: 'smooth' });
                       }}
@@ -1155,7 +1368,7 @@ export default function LucenaDecisionSupport() {
 
           {/* Right Column */}
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-8)" }}>
-            
+
             {/* Section 7: Historical Price Intelligence */}
             <div className="card" style={{ display: "flex", flexDirection: "column" }}>
               <div className="card-header" style={{ padding: "var(--space-5)", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1163,12 +1376,12 @@ export default function LucenaDecisionSupport() {
                   <h3 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "var(--color-accent)", margin: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" }}><BarChart2 size={18} /> Historical Price Intelligence</h3>
                   <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)", marginTop: 2 }}>Interactive explorer with forecasting</div>
                 </div>
-                <select className="form-select" style={{ width: 150, fontSize: "var(--text-sm)", fontWeight: 700 }} value={activeCommodity.id} onChange={(e) => setActiveCommodity(staples.find(s=>s.id===e.target.value)!)}>
+                <select className="form-select" style={{ width: 150, fontSize: "var(--text-sm)", fontWeight: 700 }} value={activeCommodity.id} onChange={(e) => setActiveCommodity(staples.find(s => s.id === e.target.value)!)}>
                   {staples.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
               <div className="card-body" style={{ padding: "var(--space-5)", flex: 1, display: "flex", flexDirection: "column" }}>
-                
+
                 {/* Chart Header Stats */}
                 <div style={{ display: "flex", gap: "var(--space-6)", marginBottom: "var(--space-6)" }}>
                   <div>
@@ -1177,33 +1390,33 @@ export default function LucenaDecisionSupport() {
                   </div>
                   <div>
                     <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", fontWeight: 700, color: "var(--text-muted)" }}>30-Day High</div>
-                    <div style={{ fontSize: "var(--text-2xl)", fontWeight: 900, color: "#DC2626" }}>₱95</div>
+                    <div style={{ fontSize: "var(--text-2xl)", fontWeight: 900, color: "#DC2626" }}>₱{activeCommodity.thirtyDayHigh ?? 95}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", fontWeight: 700, color: "var(--text-muted)" }}>30-Day Low</div>
-                    <div style={{ fontSize: "var(--text-2xl)", fontWeight: 900, color: "#16A34A" }}>₱70</div>
+                    <div style={{ fontSize: "var(--text-2xl)", fontWeight: 900, color: "#16A34A" }}>₱{activeCommodity.thirtyDayLow ?? 70}</div>
                   </div>
                 </div>
 
                 {/* Interactive Area Chart */}
                 <div style={{ height: 250, width: "100%", marginBottom: "var(--space-4)" }}>
                   {isMounted ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={activeCommodity.id === 'tomato' ? HISTORICAL_DATA : HISTORICAL_DATA.map(d => ({ ...d, price: d.price * (activeCommodity.price/88) }))} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.8}/>
-                          <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#D1D5DB" />
-                      <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#4B5563", fontWeight: 600 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 12, fill: "#4B5563", fontWeight: 600 }} axisLine={false} tickLine={false} />
-                      <RechartsTooltip contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }} />
-                      <Area type="monotone" dataKey="price" stroke="var(--color-accent)" strokeWidth={3} fillOpacity={1} fill="url(#colorPrice)" />
-                      {activeCommodity.id === 'tomato' && <ReferenceDot x="May 29" y={95} r={5} fill="#DC2626" stroke="white" strokeWidth={2} />}
-                    </AreaChart>
-                  </ResponsiveContainer>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={activeCommodity?.historicalData || HISTORICAL_DATA} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.8} />
+                            <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#D1D5DB" />
+                        <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#4B5563", fontWeight: 600 }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 12, fill: "#4B5563", fontWeight: 600 }} axisLine={false} tickLine={false} />
+                        <RechartsTooltip contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }} />
+                        <Area type="monotone" dataKey="price" stroke="var(--color-accent)" strokeWidth={3} fillOpacity={1} fill="url(#colorPrice)" />
+                        {activeCommodity.id === 'tomato' && <ReferenceDot x="May 29" y={95} r={5} fill="#DC2626" stroke="white" strokeWidth={2} />}
+                      </AreaChart>
+                    </ResponsiveContainer>
                   ) : <div style={{ height: "100%", width: "100%" }} />}
                 </div>
 
@@ -1247,7 +1460,7 @@ export default function LucenaDecisionSupport() {
                 <h3 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "var(--color-accent)", margin: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" }}><Utensils size={18} /> Today's Sulit Ulam</h3>
               </div>
               <div className="card-body" style={{ padding: "var(--space-5)" }}>
-                
+
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)", marginBottom: "var(--space-6)" }}>
                   <div style={{ background: "#F0FDF4", padding: "12px", borderRadius: "8px", border: "1px solid #DCFCE7" }}>
                     <div style={{ fontSize: "11px", color: "#166534", fontWeight: 800, textTransform: "uppercase", marginBottom: 4 }}>🟢 Cheapest Dish</div>
@@ -1321,20 +1534,20 @@ export default function LucenaDecisionSupport() {
               if (!staples.length) return null;
               const increases = staples.filter(s => s.weeklyChange > 0).sort((a, b) => b.weeklyChange - a.weeklyChange);
               const decreases = staples.filter(s => s.weeklyChange < 0).sort((a, b) => a.weeklyChange - b.weeklyChange);
-              
+
               const biggestIncrease = increases.length > 0 ? increases[0] : null;
               const biggestDecrease = decreases.length > 0 ? decreases[0] : null;
-              
+
               const sortedByVolatility = [...staples].filter(s => Math.abs(s.weeklyChange) > 0).sort((a, b) => Math.abs(b.weeklyChange) - Math.abs(a.weeklyChange));
               const mostVolatile = sortedByVolatility.length > 0 ? sortedByVolatility[0] : null;
-              
+
               const sortedByStability = [...staples].sort((a, b) => Math.abs(a.weeklyChange) - Math.abs(b.weeklyChange));
               const mostStable = sortedByStability[0];
 
               const formatName = (item: any) => {
                 if (!item || !item.name) return '';
                 if (!item.category) return item.name;
-                
+
                 const catLower = item.category.toLowerCase();
                 if (catLower.includes('imported commercial rice')) return `${item.name} (Imported Rice)`;
                 if (catLower.includes('local commercial rice')) return `${item.name} (Local Rice)`;
@@ -1378,7 +1591,7 @@ export default function LucenaDecisionSupport() {
         </div>
 
       </main>
-      
+
       {/* Footer */}
       <footer style={{ background: "white", borderTop: "1px solid #E5E7EB", padding: "var(--space-10) var(--space-6)", textAlign: "center", marginTop: "auto" }}>
         <div style={{ fontWeight: 800, color: "var(--color-primary)", fontSize: "var(--text-2xl)", letterSpacing: "-1px" }}>GeoMarketics</div>
@@ -1408,11 +1621,11 @@ export default function LucenaDecisionSupport() {
                 <form onSubmit={handleComplaintSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                   <div>
                     <label style={{ display: "block", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "6px" }}>Stall Number (if known)</label>
-                    <input type="text" list="stalls-list" placeholder="Search stall or vendor (e.g. B-12)" style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #D1D5DB" }}
-                      value={complaintForm.stall} onChange={e => setComplaintForm({...complaintForm, stall: e.target.value})} />
+                    <input type="text" list="stalls-list" placeholder="Search stall (e.g. B-12)" style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #D1D5DB" }}
+                      value={complaintForm.stall} onChange={e => setComplaintForm({ ...complaintForm, stall: e.target.value })} />
                     <datalist id="stalls-list">
                       {stallsList.map(s => (
-                        <option key={s.id} value={s.stall_number}>{s.vendor_name ? s.vendor_name : 'Vacant'}</option>
+                        <option key={s.id} value={s.stall_number}>{s.vendor_name ? 'Registered Vendor' : 'Vacant'}</option>
                       ))}
                     </datalist>
                   </div>
@@ -1420,7 +1633,7 @@ export default function LucenaDecisionSupport() {
                   <div>
                     <label style={{ display: "block", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "6px" }}>Issue Category</label>
                     <select className="form-select" style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #D1D5DB", appearance: "auto" }}
-                      value={complaintForm.category} onChange={e => setComplaintForm({...complaintForm, category: e.target.value})}>
+                      value={complaintForm.category} onChange={e => setComplaintForm({ ...complaintForm, category: e.target.value })}>
                       <option value="sanitation">Sanitation</option>
                       <option value="overpricing">Overpricing</option>
                       <option value="safety">Safety Hazard</option>
@@ -1433,15 +1646,15 @@ export default function LucenaDecisionSupport() {
                   </div>
 
                   <div>
-                    <label style={{ display: "block", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "6px" }}>Your Email <span style={{color: "#DC2626"}}>*</span></label>
+                    <label style={{ display: "block", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "6px" }}>Your Email <span style={{ color: "#DC2626" }}>*</span></label>
                     <input type="email" required placeholder="For updates regarding your complaint..." style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #D1D5DB" }}
-                      value={complaintForm.email} onChange={e => setComplaintForm({...complaintForm, email: e.target.value})} />
+                      value={complaintForm.email} onChange={e => setComplaintForm({ ...complaintForm, email: e.target.value })} />
                   </div>
 
                   <div>
-                    <label style={{ display: "block", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "6px" }}>Describe the Issue <span style={{color: "#DC2626"}}>*</span></label>
+                    <label style={{ display: "block", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "6px" }}>Describe the Issue <span style={{ color: "#DC2626" }}>*</span></label>
                     <textarea rows={4} required placeholder="What did you observe? Be as specific as possible..." style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #D1D5DB", resize: "vertical" }}
-                      value={complaintForm.description} onChange={e => setComplaintForm({...complaintForm, description: e.target.value})} />
+                      value={complaintForm.description} onChange={e => setComplaintForm({ ...complaintForm, description: e.target.value })} />
                   </div>
 
                   <div>
@@ -1449,12 +1662,12 @@ export default function LucenaDecisionSupport() {
                     <input type="file" accept="image/*" style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #D1D5DB", fontSize: "14px", background: "white" }}
                       onChange={e => {
                         if (e.target.files && e.target.files[0]) {
-                          setComplaintForm({...complaintForm, file: e.target.files[0]});
+                          setComplaintForm({ ...complaintForm, file: e.target.files[0] });
                         }
                       }} />
                     <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "6px" }}>Attach a photo to help us better understand the issue.</div>
                   </div>
-                  
+
                   <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end", marginTop: "16px" }}>
                     <button type="button" onClick={() => setIsComplaintModalOpen(false)} style={{ padding: "10px 20px", background: "white", border: "1px solid #D1D5DB", borderRadius: "6px", fontWeight: 600, color: "var(--text-primary)", cursor: "pointer" }}>Cancel</button>
                     <button type="submit" disabled={isSubmittingComplaint} style={{ padding: "10px 20px", background: "#F28C8C", border: "none", borderRadius: "6px", fontWeight: 700, color: "white", cursor: isSubmittingComplaint ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "8px" }}>

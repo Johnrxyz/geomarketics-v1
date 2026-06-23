@@ -13,7 +13,7 @@ import MarketMap, {
 } from "@/components/map/MarketMap";
 import { LEGACY_TO_OCCUPANCY, LEGACY_TO_COMPLIANCE, MapLayerId, MAP_LAYERS } from "@/components/map/types";
 import { getLegendEntries } from "@/components/map/MapLegend";
-import { stallsApi, violationsApi, sanitationApi } from "@/lib/api";
+import { stallsApi, violationsApi, sanitationApi, notificationsApi, vendorsApi } from "@/lib/api";
 import { useAuthGuard } from "@/lib/useAuthGuard";
 
 const CATEGORIES = ["All", "Vegetables", "Meat", "Fish", "Dry Goods", "Cooked Food", "Fruits"];
@@ -31,6 +31,7 @@ function MapContent() {
   const [selectedStallId, setSelectedStallId] = useState<string | null>(null);
   const [focusTrigger, setFocusTrigger] = useState(0);
   const [initialSelectDone, setInitialSelectDone] = useState(false);
+  const [vendors, setVendors] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState<"All" | OccupancyStatus>("All");
@@ -76,7 +77,14 @@ function MapContent() {
   const fetchStalls = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await stallsApi.list({ page_size: "1000" }) as { results: Record<string, unknown>[] };
+      const [stallsRes, vendorsRes] = await Promise.all([
+        stallsApi.list({ page_size: 1000 }),
+        vendorsApi.list()
+      ]);
+      const data = stallsRes as Record<string, unknown>;
+      const vendorsData = (vendorsRes as any).results || vendorsRes;
+      setVendors(Array.isArray(vendorsData) ? vendorsData : []);
+
       const items = (data.results || []) as Record<string, unknown>[];
 
       const STALL_W = 200;
@@ -280,8 +288,47 @@ function MapContent() {
             notes: actionForm.notes,
           }]);
         }
+      } else if (activeAction === "notice") {
+        let vendorUserId: number | null = null;
+        try {
+          const stallDetail: any = await stallsApi.get(actionStall.dbId!);
+          vendorUserId = stallDetail?.vendor?.user_id ?? null;
+        } catch {}
+
+        if (!vendorUserId) {
+          throw new Error("This stall has no assigned vendor with a valid account.");
+        }
+
+        const noticeTypeMap: Record<string, string> = {
+          "reminder": "warning",
+          "warning": "error",
+          "inspection": "info",
+          "general": "info",
+        };
+
+        await notificationsApi.create({
+          recipient: vendorUserId,
+          notification_type: noticeTypeMap[actionForm.type] ?? "info",
+          title: actionForm.subject || "Official Notice",
+          message: actionForm.message || "You have received a new notice from market administration.",
+          link: "",
+        });
+      } else if (activeAction === "assign") {
+        if (!actionForm.vendorId) throw new Error("Please select a valid vendor from the list.");
+        
+        // Link the vendor to the stall
+        await vendorsApi.update(actionForm.vendorId, {
+          stall: actionStall.dbId,
+        });
+        
+        // Automatically update the stall's status to "owner" (Managed by Owner)
+        await stallsApi.update(actionStall.dbId, {
+          status: "owner",
+        });
+        
+        await fetchStalls(); // Refresh map data to show newly assigned vendor
       } else {
-        // notice, workorder, assign — simulate for now
+        // workorder — simulate for now
         await new Promise(resolve => setTimeout(resolve, 700));
       }
       setActionSuccess(true);
@@ -474,7 +521,7 @@ function MapContent() {
             .floating-results::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
           `}</style>
 
-          <div className="floating-results" style={{ pointerEvents: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "12px", overflowY: "auto", paddingRight: "4px" }}>
+          <div className="floating-results desktop-only" style={{ pointerEvents: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "12px", overflowY: "auto", paddingRight: "4px" }}>
             
             {/* Control Panel (Layers & Filters) */}
             <div style={{ background: "rgba(255, 255, 255, 0.95)", backdropFilter: "blur(16px)", borderRadius: "var(--radius-lg)", padding: "16px", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "1px solid #E2E8F0", flexShrink: 0 }}>
@@ -798,7 +845,14 @@ function MapContent() {
                         </button>
                         <label style={{ flex: 1, padding: "10px", border: "1px dashed #CBD5E1", borderRadius: "var(--radius-md)", cursor: "pointer", fontSize: 13, color: "#475569", fontWeight: 600, background: "#F8FAFC", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                           🖼 Upload File
-                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) { const url = URL.createObjectURL(f); setActionForm(p => ({...p, photo_file: url, photo_name: f.name})); }}} />
+                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { 
+                            const f = e.target.files?.[0]; 
+                            if (f) { 
+                              const reader = new FileReader();
+                              reader.onload = () => setActionForm(p => ({...p, photo_file: reader.result as string, photo_name: f.name}));
+                              reader.readAsDataURL(f);
+                            }
+                          }} />
                         </label>
                       </div>
                     )}
@@ -821,9 +875,35 @@ function MapContent() {
                     ⚠️ Current occupant: <strong>{actionStall.vendor}</strong>. Reassigning will detach them from this stall.
                   </div>
                 )}
-                <div className="form-group">
-                  <label className="form-label">Vendor Name or ID</label>
-                  <input className="form-input" type="text" placeholder="Enter vendor name or ID…" value={actionForm.vendor ?? ""} onChange={e => setActionForm(f => ({...f, vendor: e.target.value}))} />
+                <div className="form-group" style={{ position: "relative" }}>
+                  <label className="form-label">Vendor Name</label>
+                  <input 
+                    className="form-input" 
+                    type="text" 
+                    placeholder="Type to search vendor..." 
+                    value={actionForm.vendorSearch ?? ""} 
+                    onChange={e => setActionForm(f => ({...f, vendorSearch: e.target.value, vendorId: ""}))} 
+                  />
+                  {actionForm.vendorSearch && !actionForm.vendorId && (
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: "var(--radius-md)", maxHeight: 150, overflowY: "auto", zIndex: 10, boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
+                      {vendors.filter(v => v.full_name.toLowerCase().includes(actionForm.vendorSearch.toLowerCase())).length > 0 ? (
+                        vendors.filter(v => v.full_name.toLowerCase().includes(actionForm.vendorSearch.toLowerCase())).map(v => (
+                          <div 
+                            key={v.id} 
+                            style={{ padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #f3f4f6" }}
+                            onClick={() => setActionForm(f => ({...f, vendorSearch: v.full_name, vendorId: String(v.id)}))}
+                          >
+                            <div style={{ fontWeight: 500, fontSize: 13, color: "#111827" }}>{v.full_name}</div>
+                            <div style={{ fontSize: 11, color: "#6b7280" }}>{v.email || v.phone || "No contact info"}</div>
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ padding: "12px", fontSize: 13, color: "#6b7280", textAlign: "center", fontStyle: "italic" }}>
+                          No vendor found. Please add them in the database first.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="form-group">
                   <label className="form-label">Assignment Notes (optional)</label>

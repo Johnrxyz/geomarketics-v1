@@ -385,6 +385,14 @@ export const notificationsApi = {
     return json(res);
   },
 
+  async create(payload: any) {
+    const res = await apiFetch('/notifications/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    return json(res);
+  },
+
   async unreadCount() {
     const res = await apiFetch('/notifications/unread-count/');
     return json(res);

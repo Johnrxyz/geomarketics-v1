@@ -58,6 +58,8 @@ export default function Header({
   const panelRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLButtonElement>(null);
 
+  const [selectedNotif, setSelectedNotif] = useState<Notification | null>(null);
+
   // Fetch unread count (poll every 30s)
   const fetchCount = useCallback(async () => {
     try {
@@ -142,6 +144,9 @@ export default function Header({
     }
     if (notif.link) {
       window.location.href = notif.link;
+    } else {
+      setSelectedNotif(notif);
+      setPanelOpen(false);
     }
   };
 
@@ -292,6 +297,31 @@ export default function Header({
           </div>
         </div>
       </div>
+
+      {/* Notification Detail Modal */}
+      {selectedNotif && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", padding: 20 }}>
+          <div style={{ background: "#fff", width: "100%", maxWidth: 500, borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-xl)", overflow: "hidden" }}>
+            <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--border-color)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div className={`notif-type-dot notif-dot-${selectedNotif.notification_type}`} style={{ position: "static" }}>
+                  {typeIcon[selectedNotif.notification_type]}
+                </div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{selectedNotif.title}</h3>
+              </div>
+              <button onClick={() => setSelectedNotif(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}>
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ padding: "24px", fontSize: 15, lineHeight: 1.6, color: "var(--text-secondary)", whiteSpace: "pre-wrap" }}>
+              {selectedNotif.message}
+            </div>
+            <div style={{ padding: "16px 24px", borderTop: "1px solid var(--border-color)", background: "var(--surface-color)", textAlign: "right" }}>
+              <button onClick={() => setSelectedNotif(null)} className="btn btn-primary">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

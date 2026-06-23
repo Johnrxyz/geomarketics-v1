@@ -14,9 +14,10 @@ interface AppShellProps {
   userName?: string;
   userRole?: string;
   floatingSidebar?: boolean;
+  hideBreadcrumbs?: boolean;
 }
 
-export default function AppShell({ children, pageTitle, role = "admin", userName, userRole, floatingSidebar = false }: AppShellProps) {
+export default function AppShell({ children, pageTitle, role = "admin", userName, userRole, floatingSidebar = false, hideBreadcrumbs = false }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -58,7 +59,7 @@ export default function AppShell({ children, pageTitle, role = "admin", userName
           userRole={userRole}
         />
         <main className="page-main" id="main-content">
-          <Breadcrumbs />
+          {!hideBreadcrumbs && <Breadcrumbs />}
           {children}
         </main>
       </div>
