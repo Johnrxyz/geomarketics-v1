@@ -230,6 +230,7 @@ export default function MarketMap({
     isDragging.current = true;
     hasDragged.current = false;
     dragStart.current = { x: e.clientX, y: e.clientY };
+    lastMouse.current = { x: e.clientX, y: e.clientY };
     pointerDownTarget.current = e.target;
     // Do not set pointer capture yet, to allow native clicks to pass through!
   };
@@ -464,6 +465,8 @@ export default function MarketMap({
         background: "#F3F4F6",
         cursor: isDragging.current ? "grabbing" : "grab",
         touchAction: "none",
+        userSelect: "none",
+        WebkitUserSelect: "none",
         zIndex: 1,
       }}
       onPointerDown={(e) => {
@@ -473,6 +476,7 @@ export default function MarketMap({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
+      onDragStart={(e) => e.preventDefault()}
       role="application"
       aria-label={`Interactive Market Map â€” ${mapConfig.label}`}
     >
