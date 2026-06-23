@@ -64,8 +64,7 @@ export default function VendorManagementPage() {
   const [violationSaving, setViolationSaving] = useState(false);
   const [violationSuccess, setViolationSuccess] = useState(false);
 
-  // Reassign Modal
-  const [reassignModal, setReassignModal] = useState<{ open: boolean; vendor: Vendor | null }>({ open: false, vendor: null });
+
 
   useEffect(() => {
     loadVendors();
@@ -80,11 +79,11 @@ export default function VendorManagementPage() {
         const mapped: Vendor[] = results.map((v: any) => ({
           id: v.id,
           stall: v.stall_number ?? "—",
-          stallId: v.stall?.id ?? v.stall_id ?? v.id,
+          stallId: typeof v.stall === 'object' && v.stall !== null ? v.stall.id : (v.stall ?? v.stall_id ?? v.id),
           section: v.section_name ?? v.stall?.section_name ?? "—",
           category: v.category ?? v.stall?.category ?? "—",
           name: v.full_name ?? "—",
-          status: (v.stall?.status ?? v.stall_status ?? "vacant").toLowerCase(),
+          status: (v.stall_status ?? v.stall?.status ?? "vacant").toLowerCase(),
           violations: typeof v.compliance_rate === "number"
             ? (v.compliance_rate < 100 ? Math.round((100 - v.compliance_rate) / 10) : 0)
             : 0,
@@ -130,11 +129,6 @@ export default function VendorManagementPage() {
     router.push(`/admin/vendors/${vendor.id}`);
   }
 
-  function handleEditDetails(vendor: Vendor) {
-    setOpenDropdownId(null);
-    router.push(`/admin/vendors/${vendor.id}?edit=true`);
-  }
-
   function handleUpdateStatus(vendor: Vendor) {
     setOpenDropdownId(null);
     setNewStatus(vendor.status);
@@ -145,20 +139,11 @@ export default function VendorManagementPage() {
     if (!statusModal.vendor || !newStatus) return;
     setStatusSaving(true);
     try {
-      await stallsApi.get(statusModal.vendor.stallId); // verify access
-      // PATCH the stall status directly
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"}/stalls/${statusModal.vendor.stallId}/`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("access_token")}` },
-          body: JSON.stringify({ status: newStatus }),
-        }
-      );
-      if (res.ok) {
-        setVendors(prev => prev.map(v => v.id === statusModal.vendor!.id ? { ...v, status: newStatus } : v));
-        setStatusModal({ open: false, vendor: null });
-      }
+      await stallsApi.update(statusModal.vendor.stallId, { status: newStatus });
+      setVendors(prev => prev.map(v => v.id === statusModal.vendor!.id ? { ...v, status: newStatus } : v));
+      setStatusModal({ open: false, vendor: null });
+    } catch (err: any) {
+      alert(err?.detail ?? err?.message ?? "Failed to update stall status.");
     } finally {
       setStatusSaving(false);
     }
@@ -199,10 +184,7 @@ export default function VendorManagementPage() {
     }
   }
 
-  function handleReassign(vendor: Vendor) {
-    setOpenDropdownId(null);
-    setReassignModal({ open: true, vendor });
-  }
+
 
   function handleViewOnMap(vendor: Vendor) {
     setOpenDropdownId(null);
@@ -377,12 +359,6 @@ export default function VendorManagementPage() {
                             <span>View Full Profile</span>
                           </button>
 
-                          {/* Edit Details */}
-                          <button className="dropdown-item" onClick={() => handleEditDetails(vendor)} style={dropItemStyle}>
-                            <Edit3 size={15} style={{ color: "#10B981" }} />
-                            <span>Edit Details</span>
-                          </button>
-
                           <div style={{ height: 1, background: "var(--border-color)", margin: "4px 0" }} />
 
                           {/* Update Status */}
@@ -399,11 +375,7 @@ export default function VendorManagementPage() {
 
                           <div style={{ height: 1, background: "var(--border-color)", margin: "4px 0" }} />
 
-                          {/* Reassign Stall */}
-                          <button className="dropdown-item" onClick={() => handleReassign(vendor)} style={dropItemStyle}>
-                            <ArrowRightLeft size={15} style={{ color: "#8B5CF6" }} />
-                            <span>Reassign / Transfer Stall</span>
-                          </button>
+
 
                           {/* View on Map */}
                           <button className="dropdown-item" onClick={() => handleViewOnMap(vendor)} style={dropItemStyle}>
@@ -520,34 +492,7 @@ export default function VendorManagementPage() {
         </div>
       )}
 
-      {/* ── Reassign Modal (informational) ── */}
-      {reassignModal.open && reassignModal.vendor && (
-        <div style={overlayStyle}>
-          <div style={{ ...modalStyle, maxWidth: 440 }}>
-            <div style={modalHeaderStyle}>
-              <div>
-                <div style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>Reassign / Transfer Stall</div>
-                <div style={{ fontSize: "18px", fontWeight: 700, marginTop: 2 }}>{reassignModal.vendor.stall} — {reassignModal.vendor.name === "—" ? "Vacant" : reassignModal.vendor.name}</div>
-              </div>
-              <button onClick={() => setReassignModal({ open: false, vendor: null })} style={closeButtonStyle}><X size={18} /></button>
-            </div>
-            <div style={{ padding: "var(--space-6)" }}>
-              <div style={{ background: "#FFF7ED", border: "1px solid #FED7AA", borderRadius: "var(--radius-md)", padding: "var(--space-4)", display: "flex", gap: 12, alignItems: "flex-start", marginBottom: "var(--space-5)" }}>
-                <AlertTriangle size={18} style={{ color: "#F97316", flexShrink: 0, marginTop: 1 }} />
-                <p style={{ fontSize: "13px", color: "#92400E", lineHeight: 1.5 }}>
-                  To reassign this stall, please update the vendor's stall assignment directly in the <strong>Vendor Profile</strong> page. This action requires administrative approval and will be logged for audit purposes.
-                </p>
-              </div>
-              <div style={{ display: "flex", gap: "var(--space-3)", justifyContent: "flex-end" }}>
-                <button className="btn btn-ghost" onClick={() => setReassignModal({ open: false, vendor: null })} style={{ border: "1px solid var(--border-color)" }}>Close</button>
-                <button className="btn btn-primary" onClick={() => { setReassignModal({ open: false, vendor: null }); handleViewProfile(reassignModal.vendor!); }}>
-                  <User size={14} /> Go to Vendor Profile
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       <style>{`
         .table-hover tr:hover { background-color: #f8fafc !important; }

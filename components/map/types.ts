@@ -27,6 +27,7 @@ export type ComplianceStatus = 'compliant' | 'warning' | 'high_risk';
 
 export interface MarketStall {
   id: string;
+  dbId?: number;
   number: string;
   section: string;
   vendor: string;

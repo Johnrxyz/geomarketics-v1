@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
-import { X, ZoomIn, ZoomOut, Expand } from "lucide-react";
+import { X, ZoomIn, ZoomOut, Expand, ClipboardCheck, AlertTriangle, UserPlus, MessageSquare, Wrench, ExternalLink } from "lucide-react";
 
 // Re-export types for backward compatibility
 export type {
@@ -58,6 +58,11 @@ interface MarketMapProps {
   onStallSelect?: (stall: MarketStall | null) => void;
   onGetDirections?: (stall: MarketStall) => void;
   onViewDetails?: (stall: MarketStall) => void;
+  onLogInspection?: (stall: MarketStall) => void;
+  onIssueViolation?: (stall: MarketStall) => void;
+  onAssignVendor?: (stall: MarketStall) => void;
+  onSendNotice?: (stall: MarketStall) => void;
+  onWorkOrder?: (stall: MarketStall) => void;
   showAdminLinks?: boolean;
   showAdminLayers?: boolean;
   padding?: { top: number; right: number; bottom: number; left: number };
@@ -84,6 +89,11 @@ export default function MarketMap({
   onStallSelect,
   onGetDirections,
   onViewDetails,
+  onLogInspection,
+  onIssueViolation,
+  onAssignVendor,
+  onSendNotice,
+  onWorkOrder,
   showAdminLinks = false,
   showAdminLayers = false,
   padding,
@@ -142,6 +152,8 @@ export default function MarketMap({
   const [isTransitioning, setIsTransitioning] = useState(false);
   const isDragging = useRef(false);
   const hasDragged = useRef(false);
+  const dragStart = useRef({ x: 0, y: 0 });
+  const pointerDownTarget = useRef<EventTarget | null>(null);
   const lastMouse = useRef({ x: 0, y: 0 });
   const isAnimating = useRef(false);
   const lastSelectedId = useRef<string | null>(null);
@@ -213,9 +225,12 @@ export default function MarketMap({
   // -- Pointer events -----------------------------------------------------
   const handlePointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    if (e.target instanceof Element && e.target.closest("button, a, input, select, .stall-popup")) return;
+
     isDragging.current = true;
     hasDragged.current = false;
-    lastMouse.current = { x: e.clientX, y: e.clientY };
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    pointerDownTarget.current = e.target;
     // Do not set pointer capture yet, to allow native clicks to pass through!
   };
 
@@ -649,6 +664,7 @@ export default function MarketMap({
 
         return (
           <div
+            key={selected.id}
             style={{
               position: "absolute",
               left: transform.x + selected.svg_x * transform.scale,
@@ -707,10 +723,10 @@ export default function MarketMap({
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {selected.vendor !== "â€”" ? selected.vendor : "Vacant Stall"}
+                    {selected.vendor !== "—" ? selected.vendor : "Vacant Stall"}
                   </div>
                   <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>
-                    {selected.category} Â· {selected.section}
+                    {selected.category} · {selected.section}
                   </div>
                 </div>
               </div>
@@ -766,13 +782,30 @@ export default function MarketMap({
 
             {/* Actions */}
             {showAdminLinks ? (
-              <Link
-                href={`/map/stall/${selected.id}`}
-                className="btn btn-primary"
-                style={{ padding: "8px", fontSize: 13, justifyContent: "center" }}
-              >
-                View More Info
-              </Link>
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", marginTop: 4 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)" }}>
+                  <button className="btn" onClick={() => onLogInspection?.(selected)} style={{ background: "#F3F4F6", color: "#374151", fontSize: 11, padding: "6px", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, border: "1px solid #E5E7EB" }}>
+                    <ClipboardCheck size={14} /> Log Inspection
+                  </button>
+                  <button className="btn" onClick={() => onIssueViolation?.(selected)} style={{ background: "#FEF2F2", color: "#DC2626", fontSize: 11, padding: "6px", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, border: "1px solid #FECACA" }}>
+                    <AlertTriangle size={14} /> Issue Violation
+                  </button>
+                  <button className="btn" onClick={() => onAssignVendor?.(selected)} style={{ background: "#EFF6FF", color: "#1D4ED8", fontSize: 11, padding: "6px", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, border: "1px solid #BFDBFE" }}>
+                    <UserPlus size={14} /> {selected.vendor !== "—" ? "Reassign" : "Assign Vendor"}
+                  </button>
+                  <button className="btn" onClick={() => onSendNotice?.(selected)} style={{ background: "#FDF4FF", color: "#C026D3", fontSize: 11, padding: "6px", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, border: "1px solid #E9D5FF" }}>
+                    <MessageSquare size={14} /> Send Notice
+                  </button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)" }}>
+                  <button className="btn" onClick={() => onWorkOrder?.(selected)} style={{ background: "#FFFBEB", color: "#D97706", fontSize: 11, padding: "6px", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, border: "1px solid #FDE68A" }}>
+                    <Wrench size={14} /> Work Order
+                  </button>
+                  <Link href={`/admin/stalls/${selected.dbId}`} className="btn btn-primary" style={{ fontSize: 11, padding: "6px", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                    <ExternalLink size={14} /> Full Details
+                  </Link>
+                </div>
+              </div>
             ) : (
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                 {onViewDetails && (

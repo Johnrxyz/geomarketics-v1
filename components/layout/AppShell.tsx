@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
+import Breadcrumbs from "@/components/ui/Breadcrumbs";
 
 type Role = "admin" | "vendor" | "customer";
 
@@ -57,6 +58,7 @@ export default function AppShell({ children, pageTitle, role = "admin", userName
           userRole={userRole}
         />
         <main className="page-main" id="main-content">
+          <Breadcrumbs />
           {children}
         </main>
       </div>

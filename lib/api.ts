@@ -60,7 +60,7 @@ async function apiFetch(
       return fetch(`${BASE_URL}${path}`, { ...options, headers });
     } else {
       clearTokens();
-      window.location.href = '/login';
+      window.location.href = '/';
     }
   }
 
@@ -177,6 +177,11 @@ export const stallsApi = {
     const res = await apiFetch(`/stalls/${id}/`);
     return json(res);
   },
+
+  async update(id: number | string, data: Record<string, unknown>) {
+    const res = await apiFetch(`/stalls/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, !!getToken());
+    return json(res);
+  },
 };
 
 // ─── Sections API ────────────────────────────────────────────────────────────
@@ -221,7 +226,7 @@ export const complaintsApi = {
     });
     if (res.status === 401 && token) {
       clearTokens();
-      window.location.href = '/login';
+      window.location.href = '/';
     }
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -298,7 +303,7 @@ export const documentsApi = {
     if (res.status === 401) {
       // Very basic refresh handling for upload endpoint
       clearTokens();
-      window.location.href = '/login';
+      window.location.href = '/';
     }
     
     if (!res.ok) {

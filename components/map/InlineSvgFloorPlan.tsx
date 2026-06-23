@@ -60,70 +60,39 @@ function createTextLabel(
   w: number,
   h: number,
 ) {
-  // Remove existing labels
+  let numEl = g.querySelector(".stall-label");
+  if (numEl) {
+    if (numEl.getAttribute("fill") !== textColor) {
+      numEl.setAttribute("fill", textColor);
+    }
+    // Already created and positioned correctly
+    return;
+  }
+
+  // Remove existing labels if any
   g.querySelectorAll(".stall-label").forEach(el => el.remove());
 
+  // Make the number significantly larger
   const isSmall = Math.min(w, h) < 100;
-  const numberSize = isSmall ? 16 : 22;
-  const detailSize = isSmall ? 10 : 13;
+  const numberSize = isSmall ? 24 : 36;
 
-  const areaText = stall.area_sqm ? `${stall.area_sqm}sqm` : "";
-
-  // Stall number (bold, top area)
-  const numEl = document.createElementNS(SVG_NS, "text");
+  // Stall number (bold, perfectly centered)
+  numEl = document.createElementNS(SVG_NS, "text");
   numEl.setAttribute("x", String(cx));
-  numEl.setAttribute("y", String(cy - (areaText ? 6 : 0)));
+  numEl.setAttribute("y", String(cy));
   numEl.setAttribute("text-anchor", "middle");
   numEl.setAttribute("dominant-baseline", "central");
   numEl.setAttribute("font-size", String(numberSize));
-  numEl.setAttribute("font-weight", "800");
+  numEl.setAttribute("font-weight", "900");
   numEl.setAttribute("font-family", "system-ui, -apple-system, sans-serif");
   numEl.setAttribute("fill", textColor);
   numEl.setAttribute("pointer-events", "none");
   numEl.classList.add("stall-label");
   numEl.textContent = stall.number;
   g.appendChild(numEl);
-
-  // Area (smaller, below number)
-  if (areaText && !isSmall) {
-    const areaEl = document.createElementNS(SVG_NS, "text");
-    areaEl.setAttribute("x", String(cx));
-    areaEl.setAttribute("y", String(cy + numberSize * 0.7));
-    areaEl.setAttribute("text-anchor", "middle");
-    areaEl.setAttribute("dominant-baseline", "central");
-    areaEl.setAttribute("font-size", String(detailSize));
-    areaEl.setAttribute("font-weight", "600");
-    areaEl.setAttribute("font-family", "system-ui, -apple-system, sans-serif");
-    areaEl.setAttribute("fill", textColor);
-    areaEl.setAttribute("opacity", "0.8");
-    areaEl.setAttribute("pointer-events", "none");
-    areaEl.classList.add("stall-label");
-    areaEl.textContent = areaText;
-    g.appendChild(areaEl);
-  }
-
-  // Vendor name or status (bottom, if enough space)
-  if (!isSmall && h > 80) {
-    const label = stall.vendor !== "—" ? stall.vendor : OCCUPANCY_CONFIG[stall.occupancy_status]?.label ?? "";
-    if (label) {
-      const truncated = label.length > 14 ? label.slice(0, 12) + "…" : label;
-      const vendorEl = document.createElementNS(SVG_NS, "text");
-      vendorEl.setAttribute("x", String(cx));
-      vendorEl.setAttribute("y", String(cy + numberSize * 0.7 + detailSize + 4));
-      vendorEl.setAttribute("text-anchor", "middle");
-      vendorEl.setAttribute("dominant-baseline", "central");
-      vendorEl.setAttribute("font-size", String(detailSize - 1));
-      vendorEl.setAttribute("font-weight", "500");
-      vendorEl.setAttribute("font-family", "system-ui, -apple-system, sans-serif");
-      vendorEl.setAttribute("fill", textColor);
-      vendorEl.setAttribute("opacity", "0.65");
-      vendorEl.setAttribute("pointer-events", "none");
-      vendorEl.classList.add("stall-label");
-      vendorEl.textContent = truncated;
-      g.appendChild(vendorEl);
-    }
-  }
 }
+
+const svgCache = new Map<string, string>();
 
 export default function InlineSvgFloorPlan({
   svgSrc,
@@ -137,58 +106,73 @@ export default function InlineSvgFloorPlan({
   style,
 }: InlineSvgFloorPlanProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const svgContentRef = useRef<string | null>(null);
   const stallMapRef = useRef<Map<string, MarketStall>>(new Map());
   const svgLoadedRef = useRef(false);
 
+  // Keep track of latest onStallClick to avoid stale closures without triggering useEffect
+  const onStallClickRef = useRef(onStallClick);
   useEffect(() => {
-    const map = new Map<string, MarketStall>();
-    for (const stall of stalls) {
-      if (stall.svg_cell_id) {
-        map.set(stall.svg_cell_id, stall);
-      }
-    }
-    stallMapRef.current = map;
+    onStallClickRef.current = onStallClick;
+  }, [onStallClick]);
+
+  const selectedStallIdRef = useRef(selectedStallId);
+  useEffect(() => {
+    selectedStallIdRef.current = selectedStallId;
+  }, [selectedStallId]);
+
+  // Keep the stall map up to date
+  useEffect(() => {
+    const newMap = new Map<string, MarketStall>();
+    stalls.forEach((s) => {
+      if (s.svg_cell_id) newMap.set(s.svg_cell_id, s);
+    });
+    stallMapRef.current = newMap;
   }, [stalls]);
 
   const applyStallStyles = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const svgEl = container.querySelector("svg");
+    if (!containerRef.current || !svgLoadedRef.current) return;
+    const svgEl = containerRef.current.querySelector("svg");
     if (!svgEl) return;
 
-    const hasHighlight = highlightedStallIds.length > 0;
-
-    const allCellGroups = svgEl.querySelectorAll<SVGGElement>("g[data-cell-id]");
-    for (const g of allCellGroups) {
+    const cellGroups = svgEl.querySelectorAll("g[data-cell-id]");
+    for (let i = 0; i < cellGroups.length; i++) {
+      const g = cellGroups[i] as SVGGElement;
       const cellId = g.getAttribute("data-cell-id");
-      if (!cellId || cellId === "0" || cellId === "1") continue;
+      const rect = g.querySelector("rect");
+      if (!rect || !cellId) continue;
+
+      if (cellId === "0" || cellId === "1") {
+        rect.style.cursor = "default";
+        continue;
+      }
 
       const stall = stallMapRef.current.get(cellId);
-      const rect = g.querySelector("rect");
-      if (!rect) continue;
 
       if (stall) {
+        g.style.cursor = "pointer";
+        g.style.pointerEvents = "all";
         const { fill, stroke, text: textColor } = getStallColor(stall, activeLayer);
-        const isSelected = selectedStallId === stall.id;
-        const isHighlighted = hasHighlight && highlightedStallIds.includes(stall.id);
-        const isDimmed = hasHighlight && !isHighlighted && !isSelected;
 
         rect.style.fill = fill;
-        rect.style.stroke = isSelected ? "#6366F1" : stroke;
-        rect.style.strokeWidth = isSelected ? "12" : "7";
-        rect.style.opacity = isDimmed ? "0.35" : "1";
-        rect.style.cursor = "pointer";
-        rect.style.transition = "fill 0.2s, stroke 0.2s, opacity 0.2s";
+        rect.style.stroke = stroke;
+        rect.style.strokeWidth = "2";
+        rect.style.transition = "all 0.2s ease";
+
+        const isHighlighted = highlightedStallIds.includes(stall.id);
+        const isSelected = selectedStallId === stall.id;
 
         if (isSelected) {
+          rect.style.stroke = "#4F46E5";
+          rect.style.strokeWidth = "4";
           rect.style.filter = "drop-shadow(0 0 12px rgba(99,102,241,0.6))";
+        } else if (isHighlighted) {
+          rect.style.stroke = "#10B981";
+          rect.style.strokeWidth = "3";
         } else {
           rect.style.filter = "";
         }
 
-        g.style.pointerEvents = "all";
+        rect.style.opacity = "1";
 
         // Inject text labels
         const { cx, cy, w, h } = getRectCenter(rect);
@@ -202,8 +186,6 @@ export default function InlineSvgFloorPlan({
       }
     }
   }, [activeLayer, selectedStallId, highlightedStallIds, stalls]);
-
-  const svgCache = new Map<string, string>();
 
   // Fetch and inject the SVG
   useEffect(() => {
@@ -247,14 +229,10 @@ export default function InlineSvgFloorPlan({
             const stall = stallMapRef.current.get(cellId);
             if (stall) {
               e.stopPropagation();
-              onStallClick(stall);
+              onStallClickRef.current(stall);
             } else {
-              // Dev tool: easily get the cell ID of unmapped boxes for Django admin
               e.stopPropagation();
               console.log(`Unmapped SVG Cell ID: ${cellId}`);
-              navigator.clipboard.writeText(cellId)
-                .then(() => alert(`Copied SVG Cell ID to clipboard:\n${cellId}\n\nPaste this into the 'Svg cell id' field for a Stall in your Django Admin!`))
-                .catch(() => alert(`SVG Cell ID:\n${cellId}\n\nManually copy this and paste it into the 'Svg cell id' field for a Stall in your Django Admin.`));
             }
           });
 
@@ -279,7 +257,7 @@ export default function InlineSvgFloorPlan({
             const stall = stallMapRef.current.get(cellId);
             const rect = cellGroup.querySelector("rect");
             if (rect) {
-              if (stall && selectedStallId === stall.id) {
+              if (stall && selectedStallIdRef.current === stall.id) {
                 rect.style.filter = "drop-shadow(0 0 12px rgba(99,102,241,0.6))";
               } else {
                 rect.style.filter = "";
@@ -295,7 +273,7 @@ export default function InlineSvgFloorPlan({
     })();
 
     return () => { cancelled = true; };
-  }, [svgSrc, width, height, onStallClick]);
+  }, [svgSrc, width, height]);
 
   useEffect(() => {
     if (svgLoadedRef.current) applyStallStyles();

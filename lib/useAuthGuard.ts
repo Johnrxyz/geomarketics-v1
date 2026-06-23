@@ -40,7 +40,7 @@ export function useAuthGuard(requiredRole?: Role): AuthGuardResult {
     // 1. Must have a token
     const token = getToken();
     if (!token) {
-      router.replace("/login");
+      router.replace("/");
       return;
     }
 
@@ -49,7 +49,7 @@ export function useAuthGuard(requiredRole?: Role): AuthGuardResult {
     // 2. If a specific role is required, verify it
     if (requiredRole && currentUser?.role !== requiredRole) {
       // Redirect the user to their own home page
-      const home = ROLE_HOME[currentUser?.role as Role] ?? "/login";
+      const home = ROLE_HOME[currentUser?.role as Role] ?? "/";
       router.replace(home);
       return;
     }

@@ -65,7 +65,7 @@ const vendorNav: NavSection[] = [
 const customerNav: NavSection[] = [
   {
     items: [
-      { label: "My Complaints", href: "/consumer/complaints", icon: <AlertCircle size={18} /> },
+      { label: "My Complaints", href: "/complaints", icon: <AlertCircle size={18} /> },
     ]
   }
 ];
@@ -131,20 +131,20 @@ export default function Sidebar({ role = "admin", collapsed, onToggle, mobileOpe
         {!collapsed && <div className="sidebar-section-label" style={{ marginTop: "var(--space-4)", paddingLeft: "20px", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px", color: "rgba(255,255,255,0.4)", fontWeight: 700 }}>Public</div>}
         {collapsed && <div style={{ height: "1px", background: "rgba(255,255,255,0.1)", margin: "16px 12px 8px" }} />}
         <Link
-          href="/consumer"
-          className={`sidebar-link${pathname === "/consumer" ? " active" : ""}`}
-          title={collapsed ? "Consumer View" : undefined}
+          href="/"
+          className={`sidebar-link${pathname === "/" ? " active" : ""}`}
+          title={collapsed ? "Public View" : undefined}
           style={{
             margin: "2px 8px",
             borderRadius: "12px",
             padding: "10px 12px",
-            background: pathname === "/consumer" ? "rgba(255, 203, 5, 0.9)" : "transparent",
-            color: pathname === "/consumer" ? "#11296B" : "rgba(255, 255, 255, 0.7)",
+            background: pathname === "/" ? "rgba(255, 203, 5, 0.9)" : "transparent",
+            color: pathname === "/" ? "#11296B" : "rgba(255, 255, 255, 0.7)",
             transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
           }}
         >
           <span className="sidebar-link-icon" aria-hidden="true" style={{ color: "inherit" }}><Globe size={18} /></span>
-          <span className="sidebar-link-text">Consumer View</span>
+          <span className="sidebar-link-text">Public View</span>
         </Link>
       </nav>
 
@@ -167,7 +167,9 @@ export default function Sidebar({ role = "admin", collapsed, onToggle, mobileOpe
           </span>
           <span className="sidebar-link-text">Collapse</span>
         </button>
-        <Link href="/login" className="sidebar-link" style={{ 
+        <Link href="/" className="sidebar-link" onClick={() => {
+            try { localStorage.removeItem("geomarketics_user"); } catch {}
+          }} style={{ 
           borderRadius: "12px", 
           padding: "10px 12px",
           color: "rgba(255, 255, 255, 0.7)",
