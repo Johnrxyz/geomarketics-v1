@@ -1337,13 +1337,13 @@ export default function LucenaDecisionSupport() {
                             const nearest = matches.reduce((prev, curr) => {
                               const prevC = toCanvasCoords(prev);
                               const currC = toCanvasCoords(curr);
-                              const dPrev = Math.sqrt(Math.pow(prevC.x - currentPos.x, 2) + Math.pow(prevC.y - currentPos.y, 2));
-                              const dCurr = Math.sqrt(Math.pow(currC.x - currentPos.x, 2) + Math.pow(currC.y - currentPos.y, 2));
+                              const dPrev = Math.sqrt(Math.pow(prevC.x - currentPos!.x, 2) + Math.pow(prevC.y - currentPos!.y, 2));
+                              const dCurr = Math.sqrt(Math.pow(currC.x - currentPos!.x, 2) + Math.pow(currC.y - currentPos!.y, 2));
                               return dCurr < dPrev ? curr : prev;
                             });
 
                             const nearestCanvas = toCanvasCoords(nearest);
-                            dist += Math.floor(Math.sqrt(Math.pow(nearestCanvas.x - currentPos.x, 2) + Math.pow(nearestCanvas.y - currentPos.y, 2)) / 50);
+                            dist += Math.floor(Math.sqrt(Math.pow(nearestCanvas.x - currentPos!.x, 2) + Math.pow(nearestCanvas.y - currentPos!.y, 2)) / 50);
                             routePoints.push({ x: nearestCanvas.x, y: nearestCanvas.y, label: `${ing.commodityName} (Stall ${nearest.number})` });
                             highlighted.push(nearest.id);
                             currentPos = nearestCanvas;
@@ -1390,11 +1390,11 @@ export default function LucenaDecisionSupport() {
                   </div>
                   <div>
                     <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", fontWeight: 700, color: "var(--text-muted)" }}>30-Day High</div>
-                    <div style={{ fontSize: "var(--text-2xl)", fontWeight: 900, color: "#DC2626" }}>₱{activeCommodity.thirtyDayHigh ?? 95}</div>
+                    <div style={{ fontSize: "var(--text-2xl)", fontWeight: 900, color: "#DC2626" }}>₱{(activeCommodity as any).thirtyDayHigh ?? 95}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", fontWeight: 700, color: "var(--text-muted)" }}>30-Day Low</div>
-                    <div style={{ fontSize: "var(--text-2xl)", fontWeight: 900, color: "#16A34A" }}>₱{activeCommodity.thirtyDayLow ?? 70}</div>
+                    <div style={{ fontSize: "var(--text-2xl)", fontWeight: 900, color: "#16A34A" }}>₱{(activeCommodity as any).thirtyDayLow ?? 70}</div>
                   </div>
                 </div>
 
@@ -1402,7 +1402,7 @@ export default function LucenaDecisionSupport() {
                 <div style={{ height: 250, width: "100%", marginBottom: "var(--space-4)" }}>
                   {isMounted ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={activeCommodity?.historicalData || HISTORICAL_DATA} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <AreaChart data={(activeCommodity as any)?.historicalData || HISTORICAL_DATA} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                         <defs>
                           <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.8} />
