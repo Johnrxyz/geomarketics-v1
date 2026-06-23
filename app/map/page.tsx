@@ -78,7 +78,7 @@ function MapContent() {
     setLoading(true);
     try {
       const [stallsRes, vendorsRes] = await Promise.all([
-        stallsApi.list({ page_size: 1000 }),
+        stallsApi.list({ page_size: "1000" }),
         vendorsApi.list()
       ]);
       const data = stallsRes as Record<string, unknown>;
