@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense, useRef } from "react";
+import { useState, useEffect, useCallback, Suspense, useRef, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import AppShell from "@/components/layout/AppShell";
 import { Search, ChevronRight, ChevronUp, ChevronDown, SlidersHorizontal, List, X, ClipboardCheck, AlertTriangle, UserPlus, MessageSquare, Wrench, CheckCircle } from "lucide-react";
@@ -13,11 +13,17 @@ import MarketMap, {
 } from "@/components/map/MarketMap";
 import { LEGACY_TO_OCCUPANCY, LEGACY_TO_COMPLIANCE, MapLayerId, MAP_LAYERS } from "@/components/map/types";
 import { getLegendEntries } from "@/components/map/MapLegend";
-import { stallsApi, violationsApi, sanitationApi, notificationsApi, vendorsApi } from "@/lib/api";
+import { stallsApi, violationsApi, sanitationApi, notificationsApi, vendorsApi, sectionsApi } from "@/lib/api";
 import { useAuthGuard } from "@/lib/useAuthGuard";
 
-const CATEGORIES = ["All", "Vegetables", "Meat", "Fish", "Dry Goods", "Cooked Food", "Fruits"];
+// Categories are now dynamically pulled from stalls to prevent zero-result empty states.
 const OCCUPANCY_STATUSES: ("All" | OccupancyStatus)[] = ["All", "owner", "rented", "storage", "surrendered_bolante", "vacant", "closed"];
+
+const CATEGORY_EMOJIS: Record<string, string> = {
+  vegetables: "🥦", meat: "🥩", fish: "🐟", "dry goods": "🌾",
+  "cooked food": "🍲", fruits: "🍊", poultry: "🐔", spices: "🌶️",
+  seafood: "🦐", dairy: "🥛", default: "🛄",
+};
 
 
 
@@ -32,10 +38,16 @@ function MapContent() {
   const [focusTrigger, setFocusTrigger] = useState(0);
   const [initialSelectDone, setInitialSelectDone] = useState(false);
   const [vendors, setVendors] = useState<any[]>([]);
+  const [sections, setSections] = useState<{ code: string; name: string; description: string; color: string }[]>([]);
+  const [sectionFilter, setSectionFilter] = useState<string>("All");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState<"All" | OccupancyStatus>("All");
   const [activeLayer, setActiveLayer] = useState<MapLayerId>("stall_status");
+  const [filtersCollapsed, setFiltersCollapsed] = useState(false);
+
+  // Alert summary — fetched once when admin map loads
+  const [alertStalls, setAlertStalls] = useState<any[]>([]);
 
   // Action modal state
   type ActionType = "inspection" | "violation" | "assign" | "notice" | "workorder" | null;
@@ -45,6 +57,16 @@ function MapContent() {
   const [actionSaving, setActionSaving] = useState(false);
   const [actionSuccess, setActionSuccess] = useState(false);
   const [priorViolationCount, setPriorViolationCount] = useState<number | null>(null);
+
+  // Dynamically compute available categories from loaded stalls
+  const dynamicCategories = useMemo(() => {
+    const cats = new Set(stalls.map(s => {
+      const c = (s.category || "").trim();
+      // Capitalize first letter for nice UI
+      return c ? c.charAt(0).toUpperCase() + c.slice(1) : "";
+    }).filter(Boolean));
+    return ["All", ...Array.from(cats).sort()];
+  }, [stalls]);
   // Camera state
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -74,23 +96,101 @@ function MapContent() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  const SESSION_CACHE_KEY = "geomarketics_stalls_v1";
+
+  /** Transforms raw API items into MarketStall objects */
+  const mapItems = useCallback((
+    items: Record<string, unknown>[],
+    sectionIndex: Record<string, number>,
+    sectionCounter: Record<string, number>
+  ): MarketStall[] => {
+    const STALL_W = 200;
+    const STALL_H = 120;
+    const COLS = 12;
+    const SEC_PAD = 400;
+
+    return items.map((s) => {
+      const rawX = s.svg_x as number | null;
+      const rawY = s.svg_y as number | null;
+      const hasCoords = rawX != null && rawY != null && (rawX !== 0 || rawY !== 0);
+
+      let svg_x: number, svg_y: number;
+      if (hasCoords) {
+        svg_x = rawX!; svg_y = rawY!;
+      } else {
+        const sec = String(s.section_code ?? "?");
+        const idx = sectionCounter[sec]++;
+        const col = idx % COLS;
+        const row = Math.floor(idx / COLS);
+        const secRow = sectionIndex[sec];
+        svg_x = 300 + col * (STALL_W + 40);
+        svg_y = 200 + secRow * (SEC_PAD + Math.ceil(Object.keys(sectionIndex).length) * 20) + row * (STALL_H + 30);
+      }
+
+      const legacyStatus = String(s.status ?? "vacant");
+
+      return {
+        id: `stall-${String(s.stall_number).toLowerCase().replace(/-/g, "")}`,
+        dbId: s.id as number,
+        number: s.stall_number as string,
+        section: `Section ${s.section_code}`,
+        vendor: (s.vendor_name as string) || "—",
+        category: s.category as string,
+        occupancy_status: (s.occupancy_status as OccupancyStatus) ?? LEGACY_TO_OCCUPANCY[legacyStatus] ?? "vacant",
+        compliance_status: (s.compliance_status as MarketStall["compliance_status"]) ?? LEGACY_TO_COMPLIANCE[legacyStatus] ?? null,
+        svg_x,
+        svg_y,
+        polygon_data: (s.polygon_data as string | undefined),
+        svg_cell_id: (s.svg_cell_id as string) || "",
+        area_sqm: (s.area_sqm as number | null) ?? null,
+        building: (s.building as BuildingId) ?? "main",
+        floor: (s.floor as FloorId) ?? "1",
+      };
+    });
+  }, []);
+
+  // Fetch alert summary (admin-only). Fires once after auth is ready.
+  useEffect(() => {
+    if (!ready || authUser?.role !== 'admin') return;
+    stallsApi.alertSummary()
+      .then((data) => setAlertStalls(Array.isArray(data) ? data : []))
+      .catch(() => { /* non-critical — map works fine without alerts */ });
+  }, [ready, authUser?.role]);
+
   const fetchStalls = useCallback(async () => {
+    // ── Phase 0: Serve from sessionStorage cache immediately ──────────────
+    // On repeat visits within the same session (tab refresh, navigation back),
+    // the map becomes interactive instantly with zero network cost.
+    try {
+      const cached = sessionStorage.getItem(SESSION_CACHE_KEY);
+      if (cached) {
+        const { stalls: cachedStalls, vendors: cachedVendors, ts } = JSON.parse(cached);
+        // Use cache if it's less than 5 minutes old
+        if (Date.now() - ts < 5 * 60 * 1000) {
+          setStalls(cachedStalls);
+          setVendors(cachedVendors ?? []);
+          setLoading(false);
+          // Still refresh in background so data stays fresh
+        }
+      }
+    } catch { /* sessionStorage may be unavailable (private browsing) */ }
+
     setLoading(true);
     try {
-      const [stallsRes, vendorsRes] = await Promise.all([
+      // ── Phase 1: Fetch vendors + stalls ──────────────────────────────
+      const [vendorsRes, floor1Res] = await Promise.all([
+        vendorsApi.list(),
         stallsApi.list({ page_size: "1000" }),
-        vendorsApi.list()
       ]);
-      const data = stallsRes as Record<string, unknown>;
-      const vendorsData = (vendorsRes as any).results || vendorsRes;
-      setVendors(Array.isArray(vendorsData) ? vendorsData : []);
 
+      const vendorsData = (vendorsRes as any).results || vendorsRes;
+      const allVendors = Array.isArray(vendorsData) ? vendorsData : [];
+      setVendors(allVendors);
+
+      const data = floor1Res as Record<string, unknown>;
       const items = (data.results || []) as Record<string, unknown>[];
 
-      const STALL_W = 200;
-      const STALL_H = 120;
-      const COLS = 12;
-      const SEC_PAD = 400;
+      // Build section index for fallback coordinate grid
       const sectionIndex: Record<string, number> = {};
       const sectionCounter: Record<string, number> = {};
       let secOrder = 0;
@@ -99,55 +199,35 @@ function MapContent() {
         if (!(sec in sectionIndex)) { sectionIndex[sec] = secOrder++; sectionCounter[sec] = 0; }
       });
 
-      const mapped: MarketStall[] = items.map((s) => {
-        const rawX = s.svg_x as number | null;
-        const rawY = s.svg_y as number | null;
-        const hasCoords = rawX != null && rawY != null && (rawX !== 0 || rawY !== 0);
-
-        let svg_x: number, svg_y: number;
-        if (hasCoords) {
-          svg_x = rawX!; svg_y = rawY!;
-        } else {
-          const sec = String(s.section_code ?? "?");
-          const idx = sectionCounter[sec]++;
-          const col = idx % COLS;
-          const row = Math.floor(idx / COLS);
-          const secRow = sectionIndex[sec];
-          svg_x = 300 + col * (STALL_W + 40);
-          svg_y = 200 + secRow * (SEC_PAD + Math.ceil(Object.keys(sectionIndex).length) * 20) + row * (STALL_H + 30);
-        }
-
-        const legacyStatus = String(s.status ?? "vacant");
-
-        return {
-          id: `stall-${String(s.stall_number).toLowerCase().replace(/-/g, "")}`,
-          dbId: s.id as number,
-          number: s.stall_number as string,
-          section: `Section ${s.section_code}`,
-          vendor: (s.vendor_name as string) || "—",
-          category: s.category as string,
-          // New dual-status fields (use API values if present, else derive from legacy)
-          occupancy_status: (s.occupancy_status as OccupancyStatus) ?? LEGACY_TO_OCCUPANCY[legacyStatus] ?? "vacant",
-          compliance_status: (s.compliance_status as MarketStall["compliance_status"]) ?? LEGACY_TO_COMPLIANCE[legacyStatus] ?? null,
-          svg_x,
-          svg_y,
-          polygon_data: (s.polygon_data as string | undefined),
-          svg_cell_id: (s.svg_cell_id as string) || "",
-          area_sqm: (s.area_sqm as number | null) ?? null,
-          building: (s.building as BuildingId) ?? "main",
-          floor: (s.floor as FloorId) ?? "1",
-        };
-      });
-
+      const mapped = mapItems(items, sectionIndex, sectionCounter);
       setStalls(mapped);
+      setLoading(false);
+
+      // ── Phase 2: Persist to sessionStorage for instant repeat loads ───
+      try {
+        sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify({
+          stalls: mapped,
+          vendors: allVendors,
+          ts: Date.now(),
+        }));
+      } catch { /* quota exceeded or private browsing — graceful skip */ }
+
     } catch {
       // fallback to empty
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [mapItems]);
 
   useEffect(() => { if (ready) fetchStalls(); }, [fetchStalls, ready]);
+
+  // Fetch sections for the Section Guide
+  useEffect(() => {
+    sectionsApi.list().then((data: any) => {
+      const results = data.results ?? data ?? [];
+      setSections(Array.isArray(results) ? results : []);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (stalls.length > 0 && !initialSelectDone) {
@@ -253,14 +333,14 @@ function MapContent() {
         const penaltySeverityMap: Record<string, string> = { "1st": "low", "2nd": "high", "3rd": "critical" };
         const autoOffence = priorViolationCount === null ? "1st"
           : priorViolationCount === 0 ? "1st"
-          : priorViolationCount === 1 ? "2nd" : "3rd";
+            : priorViolationCount === 1 ? "2nd" : "3rd";
 
         // Fetch stall detail to get the vendor integer FK
         let vendorId: number | null = null;
         try {
           const stallDetail: any = await stallsApi.get(actionStall.dbId!);
           vendorId = stallDetail?.vendor?.id ?? null;
-        } catch {}
+        } catch { }
 
         if (!vendorId) {
           throw new Error("This stall has no assigned vendor. Cannot issue a violation to a vacant stall.");
@@ -293,7 +373,7 @@ function MapContent() {
         try {
           const stallDetail: any = await stallsApi.get(actionStall.dbId!);
           vendorUserId = stallDetail?.vendor?.user_id ?? null;
-        } catch {}
+        } catch { }
 
         if (!vendorUserId) {
           throw new Error("This stall has no assigned vendor with a valid account.");
@@ -315,17 +395,17 @@ function MapContent() {
         });
       } else if (activeAction === "assign") {
         if (!actionForm.vendorId) throw new Error("Please select a valid vendor from the list.");
-        
+
         // Link the vendor to the stall
         await vendorsApi.update(actionForm.vendorId, {
           stall: actionStall.dbId,
         });
-        
+
         // Automatically update the stall's status to "owner" (Managed by Owner)
         await stallsApi.update(actionStall.dbId!, {
           status: "owner",
         });
-        
+
         await fetchStalls(); // Refresh map data to show newly assigned vendor
       } else {
         // workorder — simulate for now
@@ -347,12 +427,22 @@ function MapContent() {
       s.number.toLowerCase().includes(search.toLowerCase()) ||
       s.vendor.toLowerCase().includes(search.toLowerCase()) ||
       (s.category ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchCat = categoryFilter === "All" || s.category === categoryFilter;
+
+    // Case-insensitive partial match so backend values like "Vegetable" match "Vegetables"
+    const sCat = (s.category ?? "").toLowerCase().replace(/[_\s]+/g, " ").trim();
+    const fCat = categoryFilter.toLowerCase().replace(/[_\s]+/g, " ").trim();
+    const matchCat = categoryFilter === "All" || sCat.includes(fCat) || fCat.includes(sCat);
+
     const matchStatus = statusFilter === "All" || s.occupancy_status === statusFilter;
+    // Section can be stored as "Section MEAT" or just "MEAT" depending on backend
+    const matchSection = sectionFilter === "All" ||
+      s.section === `Section ${sectionFilter}` ||
+      s.section === sectionFilter ||
+      s.section?.endsWith(sectionFilter);
     // Unified view: show stalls from both buildings on the active floor
-    const matchFloor = s.floor === activeFloor;
-    return matchSearch && matchCat && matchStatus && matchFloor;
+    return matchSearch && matchCat && matchStatus && matchSection;
   });
+
 
   // Map padding changes based on viewport
   const mapPadding = isMobile
@@ -368,6 +458,9 @@ function MapContent() {
         onClick={() => {
           setSelectedStallId(stall.id);
           setFocusTrigger(prev => prev + 1);
+          if (stall.floor !== activeFloor) {
+            handleBuildingFloorChange(stall.building, stall.floor);
+          }
           if (isMobile) setDrawerOpen(false);
         }}
         style={{
@@ -439,6 +532,25 @@ function MapContent() {
     )
   };
 
+  // Collapse filters and show results — called on every filter interaction
+  const applyFilter = (fn: () => void) => {
+    fn();
+    setFiltersCollapsed(true);
+    if (isMobile) {
+      setMobileTab("directory");
+      setDrawerOpen(true);
+    }
+  };
+
+  // Build a short human-readable summary of active filters for the collapsed bar
+  const activeFilterSummary = (() => {
+    const parts: string[] = [];
+    if (categoryFilter !== "All") parts.push(categoryFilter);
+    if (statusFilter !== "All") parts.push(OCCUPANCY_CONFIG[statusFilter as OccupancyStatus]?.label ?? statusFilter);
+    if (sectionFilter !== "All") parts.push(`Section ${sectionFilter}`);
+    return parts.length > 0 ? parts.join(" · ") : "All stalls";
+  })();
+
   const glassStyle = {
     background: "rgba(255, 255, 255, 0.88)",
     backdropFilter: "blur(16px)",
@@ -478,6 +590,7 @@ function MapContent() {
             onAssignVendor={(s) => openAction("assign", s)}
             onSendNotice={(s) => openAction("notice", s)}
             onWorkOrder={(s) => openAction("workorder", s)}
+            alertStalls={alertStalls}
           />
         </div>
 
@@ -487,7 +600,7 @@ function MapContent() {
         <aside
           style={{
             position: "absolute",
-            top: "calc(var(--header-height) + var(--space-3))",
+            top: "calc(var(--header-height) - 40px)",
             right: "var(--space-6)",
             width: "320px",
             maxWidth: "calc(100vw - 32px)",
@@ -501,9 +614,9 @@ function MapContent() {
           {/* Search Box */}
           <div style={{ pointerEvents: "auto", background: "white", borderRadius: "var(--radius-full)", padding: "12px 20px", display: "flex", alignItems: "center", gap: "12px", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "1px solid #E2E8F0", flexShrink: 0 }}>
             <Search size={20} color="var(--text-muted)" />
-            <input 
-              type="text" 
-              placeholder="Search stall or vendor…" 
+            <input
+              type="text"
+              placeholder="Search stall or vendor…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ flex: 1, border: "none", outline: "none", fontSize: "15px", fontWeight: 600, background: "transparent" }}
@@ -522,70 +635,148 @@ function MapContent() {
           `}</style>
 
           <div className="floating-results desktop-only" style={{ pointerEvents: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "12px", overflowY: "auto", paddingRight: "4px" }}>
-            
-            {/* Control Panel (Layers & Filters) */}
-            <div style={{ background: "rgba(255, 255, 255, 0.95)", backdropFilter: "blur(16px)", borderRadius: "var(--radius-lg)", padding: "16px", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "1px solid #E2E8F0", flexShrink: 0 }}>
-              
-              {/* Map Layers */}
-              <div style={{ marginBottom: "16px" }}>
-                <div style={{ fontSize: "10px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "8px" }}>Data Layer</div>
-                <div style={{ position: "relative" }}>
-                  <select
-                    value={activeLayer}
-                    onChange={(e) => setActiveLayer(e.target.value as MapLayerId)}
-                    style={{
-                      width: "100%", padding: "10px 12px",
-                      border: "1px solid #E2E8F0", borderRadius: "10px",
-                      fontSize: "13px", background: "white",
-                      outline: "none", fontFamily: "inherit", fontWeight: 700, color: "var(--text-primary)",
-                      appearance: "none", cursor: "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.02)"
-                    }}
+
+            {/* Control Panel — collapses to a summary pill after a filter is applied */}
+            {filtersCollapsed ? (
+              /* ── Collapsed bar ── */
+              <div style={{
+                background: "rgba(255,255,255,0.95)", backdropFilter: "blur(16px)",
+                borderRadius: "var(--radius-lg)", padding: "10px 14px",
+                boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "1px solid #E2E8F0",
+                flexShrink: 0, display: "flex", alignItems: "center", gap: "10px",
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "10px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: 3 }}>
+                    Active Filters
+                  </div>
+                  <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--color-accent)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {activeFilterSummary}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  {/* Clear all filters */}
+                  {(categoryFilter !== "All" || statusFilter !== "All" || sectionFilter !== "All") && (
+                    <button
+                      onClick={() => { setCategoryFilter("All"); setStatusFilter("All"); setSectionFilter("All"); }}
+                      title="Clear all filters"
+                      style={{ background: "#FEE2E2", border: "none", borderRadius: "6px", padding: "5px 8px", cursor: "pointer", fontSize: "11px", fontWeight: 700, color: "#DC2626" }}
+                    >
+                      ✕ Clear
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setFiltersCollapsed(false)}
+                    style={{ background: "var(--color-primary-pale)", border: "1px solid var(--color-primary)", borderRadius: "6px", padding: "5px 10px", cursor: "pointer", fontSize: "11px", fontWeight: 700, color: "var(--color-accent)", display: "flex", alignItems: "center", gap: 4 }}
                   >
-                    {MAP_LAYERS.filter(l => !l.adminOnly || role === "admin").map(l => (
-                      <option key={l.id} value={l.id}>{l.icon} {l.label}</option>
+                    <SlidersHorizontal size={12} /> Filters
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* ── Expanded filter panel ── */
+              <div style={{ background: "rgba(255, 255, 255, 0.95)", backdropFilter: "blur(16px)", borderRadius: "var(--radius-lg)", padding: "16px", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "1px solid #E2E8F0", flexShrink: 0 }}>
+
+                {/* Map Layers */}
+                <div style={{ marginBottom: "16px" }}>
+                  <div style={{ fontSize: "10px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "8px" }}>Data Layer</div>
+                  <div style={{ position: "relative" }}>
+                    <select
+                      value={activeLayer}
+                      onChange={(e) => applyFilter(() => setActiveLayer(e.target.value as MapLayerId))}
+                      style={{
+                        width: "100%", padding: "10px 12px",
+                        border: "1px solid #E2E8F0", borderRadius: "10px",
+                        fontSize: "13px", background: "white",
+                        outline: "none", fontFamily: "inherit", fontWeight: 700, color: "var(--text-primary)",
+                        appearance: "none", cursor: "pointer", boxShadow: "0 2px 4px rgba(0,0,0,0.02)"
+                      }}
+                    >
+                      {MAP_LAYERS.filter(l => !l.adminOnly || role === "admin").map(l => (
+                        <option key={l.id} value={l.id}>{l.icon} {l.label}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
+                  </div>
+                </div>
+
+                {/* Category filters */}
+                <div style={{ marginBottom: "16px" }}>
+                  <div style={{ fontSize: "10px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "8px" }}>Category</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                    {dynamicCategories.map(c => (
+                      <Chip key={c} label={c} active={categoryFilter === c} onClick={() => applyFilter(() => setCategoryFilter(c))} />
                     ))}
-                  </select>
-                  <ChevronDown size={14} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
+                  </div>
                 </div>
-              </div>
 
-              {/* Category filters */}
-              <div style={{ marginBottom: "16px" }}>
-                <div style={{ fontSize: "10px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "8px" }}>Category</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                  {CATEGORIES.map(c => (
-                    <Chip key={c} label={c} active={categoryFilter === c} onClick={() => setCategoryFilter(c)} />
-                  ))}
+                {/* Occupancy Status filters */}
+                <div style={{ marginBottom: sections.length > 0 ? "16px" : 0 }}>
+                  <div style={{ fontSize: "10px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "8px" }}>Status</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                    {OCCUPANCY_STATUSES.map(s => (
+                      <Chip
+                        key={s}
+                        label={s === "All" ? "All" : (OCCUPANCY_CONFIG[s as OccupancyStatus]?.label ?? s)}
+                        active={statusFilter === s}
+                        onClick={() => applyFilter(() => setStatusFilter(s))}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Occupancy Status filters */}
-              <div>
-                <div style={{ fontSize: "10px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "8px" }}>Status</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                  {OCCUPANCY_STATUSES.map(s => (
-                    <Chip
-                      key={s}
-                      label={s === "All" ? "All" : (OCCUPANCY_CONFIG[s as OccupancyStatus]?.label ?? s)}
-                      active={statusFilter === s}
-                      onClick={() => setStatusFilter(s)}
-                    />
-                  ))}
-                </div>
+                {/* Section Guide — inline when expanded */}
+                {sections.length > 0 && (
+                  <div style={{ borderTop: "1px solid #F1F5F9", paddingTop: "14px" }}>
+                    <div style={{ fontSize: "10px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-primary)", marginBottom: "10px", display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: 2, background: "var(--color-primary)", display: "inline-block" }} />
+                      Section Guide
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <button
+                        onClick={() => applyFilter(() => setSectionFilter("All"))}
+                        style={{
+                          textAlign: "left", padding: "7px 10px", borderRadius: "8px", cursor: "pointer", border: "none",
+                          background: sectionFilter === "All" ? "var(--color-primary)" : "#F1F5F9",
+                          color: sectionFilter === "All" ? "white" : "var(--text-secondary)",
+                          fontWeight: 700, fontSize: "12px", transition: "all 0.15s",
+                        }}
+                      >
+                        🗺️ All Sections
+                      </button>
+                      {sections.map(sec => {
+                        const nameLower = sec.name.toLowerCase();
+                        const emoji = CATEGORY_EMOJIS[nameLower] ?? CATEGORY_EMOJIS.default;
+                        const isActive = sectionFilter === sec.code;
+                        const bgColor = sec.color && sec.color !== "#gray" ? sec.color : "#64748B";
+                        return (
+                          <button
+                            key={sec.code}
+                            onClick={() => applyFilter(() => setSectionFilter(isActive ? "All" : sec.code))}
+                            style={{
+                              textAlign: "left", padding: "7px 10px", borderRadius: "8px", cursor: "pointer",
+                              border: isActive ? `2px solid ${bgColor}` : "1.5px solid #E2E8F0",
+                              background: isActive ? bgColor + "18" : "white",
+                              transition: "all 0.15s", display: "flex", alignItems: "center", gap: "8px",
+                            }}
+                          >
+                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: bgColor, flexShrink: 0, border: `2px solid ${bgColor}` }} />
+                            <span style={{ fontSize: "11px", fontWeight: 700, color: isActive ? bgColor : "var(--text-primary)" }}>
+                              {emoji} Section {sec.code}
+                            </span>
+                            <span style={{ fontSize: "10px", color: "var(--text-muted)", marginLeft: "auto", fontWeight: 500 }}>
+                              {sec.name}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-
-            {/* Legend Component */}
-            <div style={{ background: "rgba(255, 255, 255, 0.95)", backdropFilter: "blur(16px)", padding: "16px", borderRadius: "var(--radius-lg)", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "1px solid #E2E8F0", flexShrink: 0 }}>
-              <div style={{ fontSize: "10px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-primary)", marginBottom: "12px", display: "flex", alignItems: "center", gap: 6 }}>
-                <div style={{ width: 7, height: 7, borderRadius: 2, background: "var(--color-primary)" }} />
-                Active Legend
-              </div>
-              <LegendGrid />
-            </div>
+            )}
 
             {/* Stall Directory */}
-            <div style={{
+            <div id="stall-directory" style={{
               background: "rgba(255, 255, 255, 0.95)", backdropFilter: "blur(16px)",
               borderRadius: "var(--radius-lg)",
               display: "flex", flexDirection: "column",
@@ -593,7 +784,9 @@ function MapContent() {
               flexShrink: 0,
             }}>
               <div style={{ padding: "16px", borderBottom: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "12px", fontWeight: 800, color: "var(--text-primary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Directory Results</span>
+                <span style={{ fontSize: "12px", fontWeight: 800, color: "var(--text-primary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  {sectionFilter !== "All" ? `Section ${sectionFilter} Stalls` : "Directory Results"}
+                </span>
                 <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--color-primary)", background: "var(--color-primary-pale)", padding: "4px 10px", borderRadius: "var(--radius-full)" }}>
                   {loading ? "…" : filtered.length} stalls
                 </span>
@@ -605,6 +798,15 @@ function MapContent() {
                   <div style={{ padding: "24px", textAlign: "center", fontSize: "13px", color: "var(--text-muted)", fontWeight: 600 }}>No stalls found</div>
                 ) : filtered.map(stall => <StallItem key={stall.id} stall={stall} />)}
               </div>
+            </div>
+
+            {/* Legend Component */}
+            <div style={{ background: "rgba(255, 255, 255, 0.95)", backdropFilter: "blur(16px)", padding: "16px", borderRadius: "var(--radius-lg)", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "1px solid #E2E8F0", flexShrink: 0 }}>
+              <div style={{ fontSize: "10px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-primary)", marginBottom: "12px", display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 7, height: 7, borderRadius: 2, background: "var(--color-primary)" }} />
+                Active Legend
+              </div>
+              <LegendGrid />
             </div>
 
           </div>
@@ -681,8 +883,8 @@ function MapContent() {
                   <div style={{ marginBottom: "16px" }}>
                     <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: "8px" }}>Category</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                      {CATEGORIES.map(c => (
-                        <Chip key={c} label={c} active={categoryFilter === c} onClick={() => setCategoryFilter(c)} />
+                      {dynamicCategories.map(c => (
+                        <Chip key={c} label={c} active={categoryFilter === c} onClick={() => applyFilter(() => setCategoryFilter(c))} />
                       ))}
                     </div>
                   </div>
@@ -694,7 +896,7 @@ function MapContent() {
                           key={s}
                           label={s === "All" ? "All" : (OCCUPANCY_CONFIG[s as OccupancyStatus]?.label ?? s)}
                           active={statusFilter === s}
-                          onClick={() => setStatusFilter(s)}
+                          onClick={() => applyFilter(() => setStatusFilter(s))}
                         />
                       ))}
                     </div>
@@ -736,7 +938,7 @@ function MapContent() {
               <>
                 <div className="form-group">
                   <label className="form-label">Inspection Rating</label>
-                  <select className="form-input" value={actionForm.rating ?? ""} onChange={e => setActionForm(f => ({...f, rating: e.target.value}))}>
+                  <select className="form-input" value={actionForm.rating ?? ""} onChange={e => setActionForm(f => ({ ...f, rating: e.target.value }))}>
                     <option value="">Select rating…</option>
                     <option value="pass">✅ Pass</option>
                     <option value="fail">❌ Fail</option>
@@ -745,7 +947,7 @@ function MapContent() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Assessor Notes</label>
-                  <textarea className="form-input" rows={3} placeholder="Enter observations…" value={actionForm.notes ?? ""} onChange={e => setActionForm(f => ({...f, notes: e.target.value}))} style={{ resize: "vertical" }} />
+                  <textarea className="form-input" rows={3} placeholder="Enter observations…" value={actionForm.notes ?? ""} onChange={e => setActionForm(f => ({ ...f, notes: e.target.value }))} style={{ resize: "vertical" }} />
                 </div>
               </>
             ),
@@ -758,8 +960,8 @@ function MapContent() {
             fields: (() => {
               const autoOffence = priorViolationCount === null ? null
                 : priorViolationCount === 0 ? "1st"
-                : priorViolationCount === 1 ? "2nd"
-                : "3rd";
+                  : priorViolationCount === 1 ? "2nd"
+                    : "3rd";
               const offence = autoOffence ?? "?";
               const penaltyMap: Record<string, string> = { "1st": "₱500.00", "2nd": "₱1,500.00", "3rd": "Revocation of Permit" };
               const penalty = penaltyMap[offence] ?? null;
@@ -783,7 +985,7 @@ function MapContent() {
 
                   <div className="form-group">
                     <label className="form-label">Violation Type</label>
-                    <select className="form-input" value={actionForm.violation_type ?? ""} onChange={e => setActionForm(f => ({...f, violation_type: e.target.value}))}>
+                    <select className="form-input" value={actionForm.violation_type ?? ""} onChange={e => setActionForm(f => ({ ...f, violation_type: e.target.value }))}>
                       <option value="">Select type…</option>
                       <optgroup label="Sanitation &amp; Cleanliness">
                         <option value="Unsanitary Conditions">Unsanitary Conditions</option>
@@ -816,7 +1018,7 @@ function MapContent() {
 
                   <div className="form-group">
                     <label className="form-label">Description / Observations</label>
-                    <textarea className="form-input" rows={3} placeholder="Describe the observed violation in detail…" value={actionForm.description ?? ""} onChange={e => setActionForm(f => ({...f, description: e.target.value}))} style={{ resize: "vertical" }} />
+                    <textarea className="form-input" rows={3} placeholder="Describe the observed violation in detail…" value={actionForm.description ?? ""} onChange={e => setActionForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "vertical" }} />
                   </div>
 
                   {/* Built-in Camera */}
@@ -825,7 +1027,7 @@ function MapContent() {
                     {actionForm.photo_file ? (
                       <div key="photo-preview">
                         <img src={actionForm.photo_file} alt="Evidence" style={{ borderRadius: "var(--radius-md)", width: "100%", maxHeight: 200, objectFit: "cover", border: "1px solid #FECACA", display: "block" }} />
-                        <button className="btn btn-ghost" onClick={() => setActionForm(f => { const n = {...f}; delete n.photo_file; delete n.photo_name; return n; })} style={{ marginTop: 6, width: "100%", justifyContent: "center", fontSize: 12, border: "1px solid var(--border-color)" }}>
+                        <button className="btn btn-ghost" onClick={() => setActionForm(f => { const n = { ...f }; delete n.photo_file; delete n.photo_name; return n; })} style={{ marginTop: 6, width: "100%", justifyContent: "center", fontSize: 12, border: "1px solid var(--border-color)" }}>
                           🔄 Retake Photo
                         </button>
                       </div>
@@ -845,11 +1047,11 @@ function MapContent() {
                         </button>
                         <label style={{ flex: 1, padding: "10px", border: "1px dashed #CBD5E1", borderRadius: "var(--radius-md)", cursor: "pointer", fontSize: 13, color: "#475569", fontWeight: 600, background: "#F8FAFC", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                           🖼 Upload File
-                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { 
-                            const f = e.target.files?.[0]; 
-                            if (f) { 
+                          <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => {
+                            const f = e.target.files?.[0];
+                            if (f) {
                               const reader = new FileReader();
-                              reader.onload = () => setActionForm(p => ({...p, photo_file: reader.result as string, photo_name: f.name}));
+                              reader.onload = () => setActionForm(p => ({ ...p, photo_file: reader.result as string, photo_name: f.name }));
                               reader.readAsDataURL(f);
                             }
                           }} />
@@ -877,21 +1079,21 @@ function MapContent() {
                 )}
                 <div className="form-group" style={{ position: "relative" }}>
                   <label className="form-label">Vendor Name</label>
-                  <input 
-                    className="form-input" 
-                    type="text" 
-                    placeholder="Type to search vendor..." 
-                    value={actionForm.vendorSearch ?? ""} 
-                    onChange={e => setActionForm(f => ({...f, vendorSearch: e.target.value, vendorId: ""}))} 
+                  <input
+                    className="form-input"
+                    type="text"
+                    placeholder="Type to search vendor..."
+                    value={actionForm.vendorSearch ?? ""}
+                    onChange={e => setActionForm(f => ({ ...f, vendorSearch: e.target.value, vendorId: "" }))}
                   />
                   {actionForm.vendorSearch && !actionForm.vendorId && (
                     <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: "var(--radius-md)", maxHeight: 150, overflowY: "auto", zIndex: 10, boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}>
                       {vendors.filter(v => v.full_name.toLowerCase().includes(actionForm.vendorSearch.toLowerCase())).length > 0 ? (
                         vendors.filter(v => v.full_name.toLowerCase().includes(actionForm.vendorSearch.toLowerCase())).map(v => (
-                          <div 
-                            key={v.id} 
+                          <div
+                            key={v.id}
                             style={{ padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #f3f4f6" }}
-                            onClick={() => setActionForm(f => ({...f, vendorSearch: v.full_name, vendorId: String(v.id)}))}
+                            onClick={() => setActionForm(f => ({ ...f, vendorSearch: v.full_name, vendorId: String(v.id) }))}
                           >
                             <div style={{ fontWeight: 500, fontSize: 13, color: "#111827" }}>{v.full_name}</div>
                             <div style={{ fontSize: 11, color: "#6b7280" }}>{v.email || v.phone || "No contact info"}</div>
@@ -907,7 +1109,7 @@ function MapContent() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Assignment Notes (optional)</label>
-                  <textarea className="form-input" rows={2} placeholder="e.g. Temporary assignment, valid until Dec 2025" value={actionForm.notes ?? ""} onChange={e => setActionForm(f => ({...f, notes: e.target.value}))} style={{ resize: "vertical" }} />
+                  <textarea className="form-input" rows={2} placeholder="e.g. Temporary assignment, valid until Dec 2025" value={actionForm.notes ?? ""} onChange={e => setActionForm(f => ({ ...f, notes: e.target.value }))} style={{ resize: "vertical" }} />
                 </div>
               </>
             ),
@@ -921,7 +1123,7 @@ function MapContent() {
               <>
                 <div className="form-group">
                   <label className="form-label">Notice Type</label>
-                  <select className="form-input" value={actionForm.type ?? ""} onChange={e => setActionForm(f => ({...f, type: e.target.value}))}>
+                  <select className="form-input" value={actionForm.type ?? ""} onChange={e => setActionForm(f => ({ ...f, type: e.target.value }))}>
                     <option value="">Select type…</option>
                     <option value="reminder">Payment Reminder</option>
                     <option value="warning">Official Warning</option>
@@ -931,11 +1133,11 @@ function MapContent() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Subject</label>
-                  <input className="form-input" type="text" placeholder="Notice subject…" value={actionForm.subject ?? ""} onChange={e => setActionForm(f => ({...f, subject: e.target.value}))} />
+                  <input className="form-input" type="text" placeholder="Notice subject…" value={actionForm.subject ?? ""} onChange={e => setActionForm(f => ({ ...f, subject: e.target.value }))} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Message</label>
-                  <textarea className="form-input" rows={3} placeholder="Write your message here…" value={actionForm.message ?? ""} onChange={e => setActionForm(f => ({...f, message: e.target.value}))} style={{ resize: "vertical" }} />
+                  <textarea className="form-input" rows={3} placeholder="Write your message here…" value={actionForm.message ?? ""} onChange={e => setActionForm(f => ({ ...f, message: e.target.value }))} style={{ resize: "vertical" }} />
                 </div>
               </>
             ),
@@ -949,7 +1151,7 @@ function MapContent() {
               <>
                 <div className="form-group">
                   <label className="form-label">Priority Level</label>
-                  <select className="form-input" value={actionForm.priority ?? ""} onChange={e => setActionForm(f => ({...f, priority: e.target.value}))}>
+                  <select className="form-input" value={actionForm.priority ?? ""} onChange={e => setActionForm(f => ({ ...f, priority: e.target.value }))}>
                     <option value="">Select priority…</option>
                     <option value="low">🟢 Low</option>
                     <option value="medium">🟡 Medium</option>
@@ -958,7 +1160,7 @@ function MapContent() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Issue Description</label>
-                  <textarea className="form-input" rows={3} placeholder="Describe the maintenance issue…" value={actionForm.description ?? ""} onChange={e => setActionForm(f => ({...f, description: e.target.value}))} style={{ resize: "vertical" }} />
+                  <textarea className="form-input" rows={3} placeholder="Describe the maintenance issue…" value={actionForm.description ?? ""} onChange={e => setActionForm(f => ({ ...f, description: e.target.value }))} style={{ resize: "vertical" }} />
                 </div>
               </>
             ),

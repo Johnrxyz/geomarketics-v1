@@ -54,6 +54,7 @@ const vendorNav: NavSection[] = [
   {
     items: [
       { label: "My Profile", href: "/vendor/profile", icon: <Store size={18} /> },
+      { label: "Announcements", href: "/vendor/announcements", icon: <Megaphone size={18} /> },
       { label: "Market Map", href: "/map", icon: <Map size={18} /> },
       { label: "Documents", href: "/vendor/documents", icon: <FileText size={18} /> },
       { label: "My Complaints", href: "/vendor/complaints", icon: <AlertCircle size={18} /> },

@@ -22,7 +22,7 @@ interface CheckColumns {
 
 interface ChecklistRow {
   id: string;
-  vendorId: string;
+  vendorId: number;
   name: string;
   stallNo: string;
   checks: CheckColumns;
@@ -38,48 +38,13 @@ interface SavedChecklist {
   savedAt: string;
 }
 
-// ─── Mock Vendor Data per Section ──────────────────────────────────────────
+interface ApiSection {
+  id: number;
+  code: string;
+  name: string;
+}
 
-const VENDORS_BY_SECTION: Record<string, { vendorId: string; name: string; stallNo: string }[]> = {
-  "Fish Section": [
-    { vendorId: "v01", name: "Carlo Mendoza",  stallNo: "C-01" },
-    { vendorId: "v02", name: "Elena Flores",   stallNo: "C-02" },
-    { vendorId: "v03", name: "Ben Castillo",   stallNo: "C-03" },
-    { vendorId: "v04", name: "Lena Bautista",  stallNo: "C-04" },
-    { vendorId: "v05", name: "Mark Tolentino", stallNo: "C-05" },
-    { vendorId: "v06", name: "Grace Aquino",   stallNo: "C-06" },
-  ],
-  "Meat Section": [
-    { vendorId: "v10", name: "Pedro Garcia",   stallNo: "B-01" },
-    { vendorId: "v11", name: "Ana Torres",     stallNo: "B-03" },
-    { vendorId: "v12", name: "Rosa Navarro",   stallNo: "B-12" },
-    { vendorId: "v13", name: "Tony Ramos",     stallNo: "B-05" },
-    { vendorId: "v14", name: "Cory Dela Cruz", stallNo: "B-07" },
-  ],
-  "Vegetable Section": [
-    { vendorId: "v20", name: "Maria Santos",   stallNo: "A-01" },
-    { vendorId: "v21", name: "Luis Reyes",     stallNo: "A-03" },
-    { vendorId: "v22", name: "Juan dela Cruz", stallNo: "A-04" },
-    { vendorId: "v23", name: "Nena Cruz",      stallNo: "A-05" },
-    { vendorId: "v24", name: "Beth Manalo",    stallNo: "A-06" },
-    { vendorId: "v25", name: "Fred Santos",    stallNo: "A-08" },
-    { vendorId: "v26", name: "Alma Villanueva",stallNo: "A-09" },
-  ],
-  "Cooked Food Section": [
-    { vendorId: "v30", name: "Nena Cruz",      stallNo: "E-01" },
-    { vendorId: "v31", name: "Tony Ramos",     stallNo: "E-02" },
-    { vendorId: "v32", name: "Joy Mercado",    stallNo: "E-03" },
-    { vendorId: "v33", name: "Dan Navarro",    stallNo: "E-04" },
-  ],
-  "Dry Goods Section": [
-    { vendorId: "v40", name: "Ben Castillo",   stallNo: "D-01" },
-    { vendorId: "v41", name: "Rita Santos",    stallNo: "D-02" },
-    { vendorId: "v42", name: "Oscar Perez",    stallNo: "D-03" },
-  ],
-};
-
-const SECTIONS = Object.keys(VENDORS_BY_SECTION);
-const CHECK_KEYS: (keyof CheckColumns)[] = ["id","uniform","hairnet","apron","boots","mask","permit"];
+const CHECK_KEYS: (keyof CheckColumns)[] = ["id", "uniform", "hairnet", "apron", "boots", "mask", "permit"];
 const CHECK_LABELS: Record<keyof CheckColumns, string> = {
   id: "ID",
   uniform: "Uniform",
@@ -90,7 +55,6 @@ const CHECK_LABELS: Record<keyof CheckColumns, string> = {
   permit: "Bus. Permit",
 };
 
-const STORAGE_KEY = "geomarketics_sanitation_history";
 // CHECK_KEY to API item name mapping
 const CHECK_KEY_TO_NAME: Record<string, string> = {
   id: "id_verification", uniform: "uniform", hairnet: "hair_net",
@@ -106,26 +70,15 @@ const emptyChecks = (): CheckColumns => ({
   apron: null, boots: null, mask: null, permit: null
 });
 
-const buildRows = (section: string): ChecklistRow[] =>
-  (VENDORS_BY_SECTION[section] || []).map((v, i) => ({
-    id: `row-${v.vendorId}`,
-    vendorId: v.vendorId,
-    name: v.name,
-    stallNo: v.stallNo,
+const buildRows = (vendors: any[]): ChecklistRow[] =>
+  (vendors || []).map((v) => ({
+    id: `row-${v.id}`,
+    vendorId: v.id,
+    name: v.full_name || `${v.first_name} ${v.last_name}`,
+    stallNo: v.stall_number || "—",
     checks: emptyChecks(),
     remarks: "",
   }));
-
-const saveToStorage = (records: SavedChecklist[]) => {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(records)); } catch {}
-};
-
-const loadFromStorage = (): SavedChecklist[] => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-};
 
 // ─── Cell Toggle Button ─────────────────────────────────────────────────────
 
@@ -134,8 +87,8 @@ function CheckCell({
 }: { value: CheckState; onChange: (v: CheckState) => void }) {
   // Cycle: null → true → false → null
   const cycle = () => {
-    if (value === null)  onChange(true);
-    else if (value === true)  onChange(false);
+    if (value === null) onChange(true);
+    else if (value === true) onChange(false);
     else onChange(null);
   };
 
@@ -186,47 +139,134 @@ function CheckCell({
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function SanitationPage() {
-  const [section, setSection]   = useState(SECTIONS[0]);
-  const [date, setDate]         = useState(todayISO);
-  const [inspector, setInspector] = useState("Inspector Cruz");
-  const [rows, setRows]         = useState<ChecklistRow[]>(() => buildRows(SECTIONS[0]));
-  const [history, setHistory]   = useState<SavedChecklist[]>([]);
+  const [sections, setSections] = useState<ApiSection[]>([]);
+  const [sectionId, setSectionId] = useState<string>("");
+  const [date, setDate] = useState(todayISO);
+  const [inspector, setInspector] = useState("");
+  const [rows, setRows] = useState<ChecklistRow[]>([]);
+  const [vendors, setVendors] = useState<any[]>([]);
+  const [history, setHistory] = useState<SavedChecklist[]>([]);
   const [viewMode, setViewMode] = useState<"checklist" | "history">("checklist");
   const [historyEntry, setHistoryEntry] = useState<SavedChecklist | null>(null);
-  const [toast, setToast]       = useState<"saved" | "error" | null>(null);
-  const [isDirty, setIsDirty]   = useState(false);
+  const [toast, setToast] = useState<"saved" | "error" | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [apiCheckItems, setApiCheckItems] = useState<Record<string, number>>({});
-  const [apiSectionMap, setApiSectionMap] = useState<Record<string, number>>({});
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [user, setUser] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    setUser(getUser());
+    const usr = getUser();
+    setUser(usr);
+    if (usr) {
+      setInspector(usr.first_name ? `${usr.first_name} ${usr.last_name}` : usr.username);
+    }
   }, []);
-  // Load history on mount + load API metadata
+
+  // Load API metadata and history
   useEffect(() => {
-    setHistory(loadFromStorage());
-    // Fetch check items and sections for API save mapping
-    sanitationApi.checkItems().then((items: unknown) => {
+    sectionsApi.list().then((data: any) => {
+      const arr = Array.isArray(data) ? data : data.results || [];
+      const activeSections = arr.filter((s: any) => s.stall_count > 0);
+      const displaySections = activeSections.length > 0 ? activeSections : arr;
+      setSections(displaySections);
+      if (displaySections.length > 0) {
+        setSectionId(String(displaySections[0].id));
+      }
+    }).catch(() => { });
+
+    sanitationApi.checkItems().then((items: any) => {
       const map: Record<string, number> = {};
-      ((items as { name: string; id: number }[]) || []).forEach((item) => { map[item.name] = item.id; });
+      (items || []).forEach((item: any) => { map[item.name] = item.id; });
       setApiCheckItems(map);
-    }).catch(() => {});
-    sectionsApi.list().then((data: unknown) => {
-      const secs = (data as { results?: { code: string; id: number }[]; } & { code?: string; id?: number }[]);
-      const arr = Array.isArray(secs) ? secs : (secs as { results?: { code: string; id: number }[] }).results || [];
-      const map: Record<string, number> = {};
-      (arr as { code: string; id: number }[]).forEach((s) => { map[s.code] = s.id; });
-      setApiSectionMap(map);
-    }).catch(() => {});
+    }).catch(() => { });
+
+    loadHistory();
   }, []);
+
+  const loadHistory = async () => {
+    try {
+      const res = await sanitationApi.sessions() as any;
+      const sessionList = Array.isArray(res) ? res : res.results || [];
+
+      const formattedHistory: SavedChecklist[] = sessionList.map((s: any) => ({
+        id: String(s.id),
+        date: s.date,
+        section: s.section_name || `Section ${s.section}`,
+        inspector: s.conducted_by_name || "Unknown",
+        rows: [],
+        savedAt: s.created_at,
+      }));
+      setHistory(formattedHistory);
+    } catch (e) {
+      console.error("Failed to load history", e);
+    }
+  };
+
+  const fetchFullSession = async (sessionId: string) => {
+    try {
+      const s = await sanitationApi.getSession(sessionId) as any;
+      const revMap: Record<number, keyof CheckColumns> = {};
+      Object.entries(CHECK_KEY_TO_NAME).forEach(([col, apiName]) => {
+        const id = apiCheckItems[apiName];
+        if (id) revMap[id] = col as keyof CheckColumns;
+      });
+
+      const rowsMap: Record<number, ChecklistRow> = {};
+      (s.records || []).forEach((rec: any) => {
+        const vId = rec.vendor;
+        if (!rowsMap[vId]) {
+          rowsMap[vId] = {
+            id: `row-${vId}`,
+            vendorId: vId,
+            name: rec.vendor_name || "Unknown",
+            stallNo: "—",
+            checks: emptyChecks(),
+            remarks: "",
+          };
+        }
+        const colKey = revMap[rec.check_item];
+        if (colKey) {
+          rowsMap[vId].checks[colKey] = rec.status === "pass" ? true : rec.status === "fail" ? false : null;
+          if (rec.remarks) {
+            rowsMap[vId].remarks = rowsMap[vId].remarks ? `${rowsMap[vId].remarks} | ${rec.remarks}` : rec.remarks;
+          }
+        }
+      });
+
+      const entry: SavedChecklist = {
+        id: String(s.id),
+        date: s.date,
+        section: s.section_name || `Section ${s.section}`,
+        inspector: s.conducted_by_name || "Unknown",
+        rows: Object.values(rowsMap),
+        savedAt: s.created_at,
+      };
+
+      setHistoryEntry(entry);
+      setViewMode("checklist");
+    } catch (e) {
+      console.error("Failed to fetch session", e);
+    }
+  };
 
   // Rebuild rows when section changes
   useEffect(() => {
-    setRows(buildRows(section));
-    setIsDirty(false);
-  }, [section]);
+    if (!sectionId) return;
+    setIsLoading(true);
+    vendorsApi.list({ stall__section: sectionId, is_active: "true" }).then((data: any) => {
+      const vends = Array.isArray(data) ? data : data.results || [];
+      setVendors(vends);
+      setRows(buildRows(vends));
+      setIsDirty(false);
+    }).catch(() => {
+      setVendors([]);
+      setRows([]);
+    }).finally(() => {
+      setIsLoading(false);
+    });
+  }, [sectionId]);
 
   const showToast = (type: "saved" | "error") => {
     setToast(type);
@@ -256,42 +296,24 @@ export default function SanitationPage() {
   }, []);
 
   const resetAll = () => {
-    setRows(buildRows(section));
+    setRows(buildRows(vendors));
     setIsDirty(false);
   };
 
   // ── Save ──────────────────────────────────────────────────────────────────
 
   const saveChecklist = async () => {
-    const record: SavedChecklist = {
-      id: `cl-${Date.now()}`,
-      date,
-      section,
-      inspector,
-      rows,
-      savedAt: new Date().toISOString(),
-    };
-    const updated = [record, ...history];
-    saveToStorage(updated);
-    setHistory(updated);
-    setIsDirty(false);
-    resetAll();
-    showToast("saved");
-
-    // Also save to API (best-effort)
     try {
-      const sectionCode = section.replace(" Section", "").trim().charAt(0);
-      const sectionId = apiSectionMap[sectionCode];
-      const session = await sanitationApi.createSession({ date, section: sectionId || null, notes: `Inspector: ${inspector}` }) as { id: number };
-      // Build records for API
-      const apiRecords: unknown[] = [];
+      const session = await sanitationApi.createSession({ date, section: parseInt(sectionId, 10), notes: `Inspector: ${inspector}` }) as { id: number };
+
+      const apiRecords: any[] = [];
       rows.forEach((row) => {
         CHECK_KEYS.forEach((key) => {
           const itemName = CHECK_KEY_TO_NAME[key];
           const itemId = apiCheckItems[itemName];
           if (itemId) {
             apiRecords.push({
-              vendor: parseInt(row.vendorId.replace("v", ""), 10) || null,
+              vendor: row.vendorId,
               check_item: itemId,
               status: row.checks[key] === true ? "pass" : row.checks[key] === false ? "fail" : "na",
               remarks: row.remarks,
@@ -299,11 +321,18 @@ export default function SanitationPage() {
           }
         });
       });
+
       if (apiRecords.length > 0) {
         await sanitationApi.bulkSave(session.id, apiRecords);
       }
-    } catch {
-      // API save failed silently — localStorage already saved
+
+      setIsDirty(false);
+      resetAll();
+      showToast("saved");
+      loadHistory();
+    } catch (e) {
+      console.error(e);
+      showToast("error");
     }
   };
 
@@ -311,7 +340,6 @@ export default function SanitationPage() {
 
   const totalChecks = rows.reduce((sum, r) =>
     sum + CHECK_KEYS.filter((k) => r.checks[k] !== null).length, 0);
-  const totalPossible = rows.length * CHECK_KEYS.length;
   const compliant = rows.reduce((sum, r) =>
     sum + CHECK_KEYS.filter((k) => r.checks[k] === true).length, 0);
   const noncompliant = rows.reduce((sum, r) =>
@@ -327,9 +355,10 @@ export default function SanitationPage() {
 
   // ── CSV export ────────────────────────────────────────────────────────────
   const exportCSV = () => {
-    const header = ["No","Name","Stall No",...CHECK_KEYS.map((k) => CHECK_LABELS[k]),"Remarks"];
+    const activeSectionName = sections.find(s => String(s.id) === sectionId)?.name || "Unknown";
+    const header = ["No", "Name", "Stall No", ...CHECK_KEYS.map((k) => CHECK_LABELS[k]), "Remarks"];
     const body = rows.map((r, i) => [
-      i+1, r.name, r.stallNo,
+      i + 1, r.name, r.stallNo,
       ...CHECK_KEYS.map((k) => r.checks[k] === true ? "✔" : r.checks[k] === false ? "✖" : ""),
       r.remarks
     ]);
@@ -338,7 +367,7 @@ export default function SanitationPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `sanitation_${section.replace(/\s/g,"_")}_${date}.csv`;
+    a.download = `sanitation_${activeSectionName.replace(/\\s/g, "_")}_${date}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -346,10 +375,11 @@ export default function SanitationPage() {
   // ── Render active history entry ────────────────────────────────────────────
 
   const displayRows = historyEntry ? historyEntry.rows : rows;
-  const isReadOnly  = !!historyEntry;
+  const isReadOnly = !!historyEntry;
+  const activeSectionName = sections.find(s => String(s.id) === sectionId)?.name || "Unknown";
 
   return (
-    <AppShell pageTitle="Sanitation Checklist" role="admin" userName="Admin User" userRole="Administrator">
+    <AppShell pageTitle="Sanitation Checklist" role="admin" userName={inspector} userRole="Administrator">
       {/* ── Toast ─────────────────────────────────────────────────────────── */}
       {toast && (
         <div
@@ -366,7 +396,7 @@ export default function SanitationPage() {
             animation: "slideInUp 0.2s ease",
           }}
         >
-          {toast === "saved" ? <CheckCircle size={16}/> : <XCircle size={16}/>}
+          {toast === "saved" ? <CheckCircle size={16} /> : <XCircle size={16} />}
           {toast === "saved" ? "Checklist saved successfully!" : "Save failed. Try again."}
         </div>
       )}
@@ -374,30 +404,30 @@ export default function SanitationPage() {
       {/* ── Page Header ───────────────────────────────────────────────────── */}
       <div className="page-header">
         <div className="page-header-left">
-          <h2 className="page-title" style={{fontSize:"var(--text-xl)"}}>Sanitation Inspection Checklist</h2>
+          <h2 className="page-title" style={{ fontSize: "var(--text-xl)" }}>Sanitation Inspection Checklist</h2>
           <p className="page-subtitle">Lucena City Public Market — Daily Compliance Record</p>
         </div>
         <div className="page-header-actions">
           {isDirty && !isReadOnly && (
-            <span style={{fontSize:12,color:"var(--color-warning)",fontWeight:600}}>● Unsaved changes</span>
+            <span style={{ fontSize: 12, color: "var(--color-warning)", fontWeight: 600 }}>● Unsaved changes</span>
           )}
           <button
             className={`btn ${viewMode === "history" ? "btn-accent" : "btn-ghost"}`}
             onClick={() => { setViewMode(viewMode === "history" ? "checklist" : "history"); setHistoryEntry(null); }}
           >
-            <History size={14}/> History ({history.length})
+            <History size={14} /> History ({history.length})
           </button>
           <button className="btn btn-ghost" onClick={exportCSV}>
-            <Download size={14}/> CSV
+            <Download size={14} /> CSV
           </button>
           {!isReadOnly && (
             <button
               className="btn btn-primary"
               onClick={saveChecklist}
               disabled={!isDirty}
-              style={{opacity: isDirty ? 1 : 0.5}}
+              style={{ opacity: isDirty ? 1 : 0.5 }}
             >
-              <Save size={14}/> Save Record
+              <Save size={14} /> Save Record
             </button>
           )}
           {isReadOnly && (
@@ -494,35 +524,35 @@ export default function SanitationPage() {
           {viewMode === "checklist" && !isReadOnly && (
             <div className="sc-meta-bar">
               <div className="sc-meta-field">
-                <label htmlFor="s-date" style={{fontSize:12, fontWeight:600, whiteSpace:"nowrap", color:"#374151"}}>
+                <label htmlFor="s-date" style={{ fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", color: "#374151" }}>
                   Date:
                 </label>
                 <input id="s-date" type="date" value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  style={{fontSize:13, border:"1px solid #D1D5DB", borderRadius:4, padding:"3px 8px", outline:"none"}}
+                  style={{ fontSize: 13, border: "1px solid #D1D5DB", borderRadius: 4, padding: "3px 8px", outline: "none" }}
                 />
               </div>
               <div className="sc-meta-field">
-                <label htmlFor="s-section" style={{fontSize:12, fontWeight:600, whiteSpace:"nowrap", color:"#374151"}}>
+                <label htmlFor="s-section" style={{ fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", color: "#374151" }}>
                   Section:
                 </label>
-                <select id="s-section" value={section} onChange={(e) => setSection(e.target.value)}
-                  style={{fontSize:13, border:"1px solid #D1D5DB", borderRadius:4, padding:"3px 8px", outline:"none", background:"white"}}
+                <select id="s-section" value={sectionId} onChange={(e) => setSectionId(e.target.value)}
+                  style={{ fontSize: 13, border: "1px solid #D1D5DB", borderRadius: 4, padding: "3px 8px", outline: "none", background: "white" }}
                 >
-                  {SECTIONS.map((s) => <option key={s}>{s}</option>)}
+                  {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
               <div className="sc-meta-field">
-                <label htmlFor="s-inspector" style={{fontSize:12, fontWeight:600, whiteSpace:"nowrap", color:"#374151"}}>
+                <label htmlFor="s-inspector" style={{ fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", color: "#374151" }}>
                   Inspector:
                 </label>
                 <input id="s-inspector" value={inspector} onChange={(e) => setInspector(e.target.value)}
-                  style={{fontSize:13, border:"1px solid #D1D5DB", borderRadius:4, padding:"3px 8px", outline:"none", width:130}}
+                  style={{ fontSize: 13, border: "1px solid #D1D5DB", borderRadius: 4, padding: "3px 8px", outline: "none", width: 130 }}
                 />
               </div>
               <button className="btn btn-ghost btn-sm" onClick={() => setIsResetModalOpen(true)}
-                title="Clear all checks" aria-label="Clear all checks" style={{flexShrink:0}}>
-                <RotateCcw size={12}/> Reset All
+                title="Clear all checks" aria-label="Clear all checks" style={{ flexShrink: 0 }}>
+                <RotateCcw size={12} /> Reset All
               </button>
             </div>
           )}
@@ -530,15 +560,15 @@ export default function SanitationPage() {
           {/* ── History banner ────────────────────────────────────────────── */}
           {isReadOnly && historyEntry && (
             <div style={{
-              background:"#EFF6FF", border:"1px solid #BFDBFE", borderRadius:6,
-              padding:"8px 14px", fontSize:13, color:"#1D4ED8",
-              display:"flex", gap:16, alignItems:"center", flexWrap:"wrap"
+              background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 6,
+              padding: "8px 14px", fontSize: 13, color: "#1D4ED8",
+              display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap"
             }}>
               <strong>Viewing saved record</strong>
               <span>Date: <b>{historyEntry.date}</b></span>
               <span>Section: <b>{historyEntry.section}</b></span>
               <span>Inspector: <b>{historyEntry.inspector}</b></span>
-              <span style={{color:"#6B7280", fontSize:11}}>
+              <span style={{ color: "#6B7280", fontSize: 11 }}>
                 Saved: {new Date(historyEntry.savedAt).toLocaleString()}
               </span>
             </div>
@@ -546,24 +576,23 @@ export default function SanitationPage() {
 
           {/* ── Table ─────────────────────────────────────────────────────── */}
           <div className="sc-table-wrap">
-            {/* Formal header above table */}
             {!isReadOnly && (
               <div style={{
-                borderBottom:"2px solid #D1D5DB",
-                padding:"8px 14px 6px",
-                background:"#F9FAFB",
-                display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:6
+                borderBottom: "2px solid #D1D5DB",
+                padding: "8px 14px 6px",
+                background: "#F9FAFB",
+                display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6
               }}>
                 <div>
-                  <div style={{fontWeight:700, fontSize:13, color:"#111827"}}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: "#111827" }}>
                     SANITATION INSPECTION REPORT
                   </div>
-                  <div style={{fontSize:11, color:"#6B7280"}}>
-                    Section: <b>{section}</b> &nbsp;|&nbsp; Date: <b>{date}</b> &nbsp;|&nbsp; Inspector: <b>{inspector}</b>
+                  <div style={{ fontSize: 11, color: "#6B7280" }}>
+                    Section: <b>{activeSectionName}</b> &nbsp;|&nbsp; Date: <b>{date}</b> &nbsp;|&nbsp; Inspector: <b>{inspector}</b>
                   </div>
                 </div>
-                <div style={{fontSize:11, color:"#6B7280", textAlign:"right"}}>
-                  Lucena City Public Market Authority<br/>
+                <div style={{ fontSize: 11, color: "#6B7280", textAlign: "right" }}>
+                  Lucena City Public Market Authority<br />
                   GeoMarketics Digital Record
                 </div>
               </div>
@@ -572,81 +601,80 @@ export default function SanitationPage() {
             <table
               aria-label="Sanitation checklist table"
               style={{
-                width:"100%", borderCollapse:"collapse",
-                fontSize:12, tableLayout:"auto",
+                width: "100%", borderCollapse: "collapse",
+                fontSize: 12, tableLayout: "auto",
               }}
             >
-              {/* Sticky header */}
               <thead>
-                <tr style={{background:"#11296B", color:"white"}}>
+                <tr style={{ background: "#11296B", color: "white" }}>
                   <th scope="col" style={thStyle}>No.</th>
-                  <th scope="col" style={{...thStyle, textAlign:"left", minWidth:130}}>Name</th>
+                  <th scope="col" style={{ ...thStyle, textAlign: "left", minWidth: 130 }}>Name</th>
                   <th scope="col" style={thStyle}>Stall No.</th>
                   {CHECK_KEYS.map((k) => (
-                    <th key={k} scope="col" style={{...thStyle, minWidth:68}}>
+                    <th key={k} scope="col" style={{ ...thStyle, minWidth: 68 }}>
                       {CHECK_LABELS[k]}
                       {colViolations[k] > 0 && (
                         <div style={{
-                          display:"inline-block", marginLeft:4,
-                          background:"#DC2626", color:"white",
-                          borderRadius:"50%", width:14, height:14,
-                          fontSize:9, fontWeight:700,
-                          lineHeight:"14px", textAlign:"center",
-                          verticalAlign:"middle",
+                          display: "inline-block", marginLeft: 4,
+                          background: "#DC2626", color: "white",
+                          borderRadius: "50%", width: 14, height: 14,
+                          fontSize: 9, fontWeight: 700,
+                          lineHeight: "14px", textAlign: "center",
+                          verticalAlign: "middle",
                         }} aria-label={`${colViolations[k]} violations`}>
                           {colViolations[k]}
                         </div>
                       )}
                     </th>
                   ))}
-                  <th scope="col" style={{...thStyle, textAlign:"left", minWidth:120}}>Remarks</th>
+                  <th scope="col" style={{ ...thStyle, textAlign: "left", minWidth: 120 }}>Remarks</th>
                   {!isReadOnly && <th scope="col" style={thStyle}>Reset</th>}
                 </tr>
               </thead>
 
               <tbody>
-                {displayRows.length === 0 && (
+                {isLoading && displayRows.length === 0 && (
                   <tr>
-                    <td colSpan={CHECK_KEYS.length + 5} style={{textAlign:"center", padding:32, color:"#9CA3AF"}}>
-                      No vendors found for this section.
+                    <td colSpan={CHECK_KEYS.length + 5} style={{ textAlign: "center", padding: 32, color: "#9CA3AF" }}>
+                      Loading vendors...
+                    </td>
+                  </tr>
+                )}
+                {!isLoading && displayRows.length === 0 && (
+                  <tr>
+                    <td colSpan={CHECK_KEYS.length + 5} style={{ textAlign: "center", padding: 32, color: "#9CA3AF" }}>
+                      No active vendors found for this section.
                     </td>
                   </tr>
                 )}
                 {displayRows.map((row, i) => {
-                  const rowCompliant  = CHECK_KEYS.every((k) => row.checks[k] === true);
-                  const rowViolation  = CHECK_KEYS.some((k) => row.checks[k] === false);
-                  const rowBg         = rowCompliant ? "#F0FDF4" : rowViolation ? "#FFF7F7" : "white";
+                  const rowCompliant = CHECK_KEYS.every((k) => row.checks[k] === true);
+                  const rowViolation = CHECK_KEYS.some((k) => row.checks[k] === false);
+                  const rowBg = rowCompliant ? "#F0FDF4" : rowViolation ? "#FFF7F7" : "white";
 
                   return (
                     <tr
                       key={row.id}
                       style={{
                         background: rowBg,
-                        borderBottom:"1px solid #E5E7EB",
-                        transition:"background 0.1s",
+                        borderBottom: "1px solid #E5E7EB",
+                        transition: "background 0.1s",
                       }}
-                      onMouseEnter={(e) => { if (!rowCompliant && !rowViolation) (e.currentTarget as HTMLTableRowElement).style.background="#F9FAFB"; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background=rowBg; }}
+                      onMouseEnter={(e) => { if (!rowCompliant && !rowViolation) (e.currentTarget as HTMLTableRowElement).style.background = "#F9FAFB"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = rowBg; }}
                     >
-                      {/* No. */}
                       <td style={tdNum}>{i + 1}</td>
-
-                      {/* Name */}
-                      <td style={{...tdBase, textAlign:"left", fontWeight:600, color:"#111827"}}>
+                      <td style={{ ...tdBase, textAlign: "left", fontWeight: 600, color: "#111827" }}>
                         {row.name}
                       </td>
-
-                      {/* Stall No */}
-                      <td style={{...tdNum, fontFamily:"monospace"}}>
+                      <td style={{ ...tdNum, fontFamily: "monospace" }}>
                         {row.stallNo}
                       </td>
-
-                      {/* Check cells */}
                       {CHECK_KEYS.map((k) => (
-                        <td key={k} style={{...tdBase, textAlign:"center", padding:"4px 6px"}}>
+                        <td key={k} style={{ ...tdBase, textAlign: "center", padding: "4px 6px" }}>
                           {isReadOnly ? (
                             <span style={{
-                              fontSize:15, fontWeight:700,
+                              fontSize: 15, fontWeight: 700,
                               color: row.checks[k] === true ? "#16A34A"
                                 : row.checks[k] === false ? "#DC2626" : "#D1D5DB"
                             }}>
@@ -660,11 +688,9 @@ export default function SanitationPage() {
                           )}
                         </td>
                       ))}
-
-                      {/* Remarks */}
-                      <td style={{...tdBase, padding:"4px 6px"}}>
+                      <td style={{ ...tdBase, padding: "4px 6px" }}>
                         {isReadOnly ? (
-                          <span style={{fontSize:11, color:"#6B7280"}}>{row.remarks || "—"}</span>
+                          <span style={{ fontSize: 11, color: "#6B7280" }}>{row.remarks || "—"}</span>
                         ) : (
                           <input
                             type="text"
@@ -673,29 +699,27 @@ export default function SanitationPage() {
                             placeholder="Notes…"
                             aria-label={`Remarks for ${row.name}`}
                             style={{
-                              width:"100%", fontSize:11, border:"1px solid #E5E7EB",
-                              borderRadius:3, padding:"3px 6px", outline:"none",
-                              background:"transparent",
-                              fontFamily:"inherit",
+                              width: "100%", fontSize: 11, border: "1px solid #E5E7EB",
+                              borderRadius: 3, padding: "3px 6px", outline: "none",
+                              background: "transparent",
+                              fontFamily: "inherit",
                             }}
-                            onFocus={(e) => (e.currentTarget.style.borderColor="#11296B")}
-                            onBlur={(e)=> (e.currentTarget.style.borderColor="#E5E7EB")}
+                            onFocus={(e) => (e.currentTarget.style.borderColor = "#11296B")}
+                            onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
                           />
                         )}
                       </td>
-
-                      {/* Reset */}
                       {!isReadOnly && (
-                        <td style={{...tdBase, textAlign:"center", padding:"4px 6px"}}>
+                        <td style={{ ...tdBase, textAlign: "center", padding: "4px 6px" }}>
                           <button
                             onClick={() => resetRow(row.id)}
                             aria-label={`Reset row for ${row.name}`}
                             title="Clear this row"
                             style={{
-                              background:"none", border:"1px solid #E5E7EB",
-                              borderRadius:3, cursor:"pointer", padding:"2px 6px",
-                              color:"#9CA3AF", fontSize:11,
-                              lineHeight:"20px",
+                              background: "none", border: "1px solid #E5E7EB",
+                              borderRadius: 3, cursor: "pointer", padding: "2px 6px",
+                              color: "#9CA3AF", fontSize: 11,
+                              lineHeight: "20px",
                             }}
                           >×</button>
                         </td>
@@ -711,53 +735,51 @@ export default function SanitationPage() {
         {/* ══ RIGHT PANEL ══════════════════════════════════════════════════ */}
         <div className="sc-right">
 
-          {/* Summary Card */}
           <div style={{
-            background:"white", border:"1px solid #E5E7EB", borderRadius:6,
-            overflow:"hidden",
+            background: "white", border: "1px solid #E5E7EB", borderRadius: 6,
+            overflow: "hidden",
           }}>
             <div style={{
-              background:"#11296B", color:"white",
-              padding:"8px 12px", fontSize:11, fontWeight:700, letterSpacing:"0.05em",
-              textTransform:"uppercase",
+              background: "#11296B", color: "white",
+              padding: "8px 12px", fontSize: 11, fontWeight: 700, letterSpacing: "0.05em",
+              textTransform: "uppercase",
             }}>Summary</div>
-            <div style={{padding:"12px", display:"flex", flexDirection:"column", gap:8}}>
+            <div style={{ padding: "12px", display: "flex", flexDirection: "column", gap: 8 }}>
               <StatLine label="Vendors" value={`${vendorsChecked} / ${rows.length}`} />
               <StatLine label="Compliant ✔" value={compliant.toString()} color="#16A34A" />
               <StatLine label="Violations ✖" value={noncompliant.toString()} color="#DC2626" />
-              <div style={{borderTop:"1px solid #F3F4F6", paddingTop:8}}>
-                <div style={{display:"flex", justifyContent:"space-between", fontSize:11, marginBottom:4}}>
-                  <span style={{color:"#6B7280"}}>Compliance Rate</span>
-                  <span style={{fontWeight:700, color: compliancePct >= 80 ? "#16A34A" : compliancePct >= 50 ? "#D97706" : "#DC2626"}}>
+              <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
+                  <span style={{ color: "#6B7280" }}>Compliance Rate</span>
+                  <span style={{ fontWeight: 700, color: compliancePct >= 80 ? "#16A34A" : compliancePct >= 50 ? "#D97706" : "#DC2626" }}>
                     {compliancePct}%
                   </span>
                 </div>
-                <div style={{height:6, background:"#F3F4F6", borderRadius:3, overflow:"hidden"}}>
+                <div style={{ height: 6, background: "#F3F4F6", borderRadius: 3, overflow: "hidden" }}>
                   <div style={{
-                    height:"100%", borderRadius:3,
-                    width:`${compliancePct}%`,
+                    height: "100%", borderRadius: 3,
+                    width: `${compliancePct}%`,
                     background: compliancePct >= 80 ? "#16A34A" : compliancePct >= 50 ? "#D97706" : "#DC2626",
-                    transition:"width 0.3s",
-                  }} role="progressbar" aria-valuenow={compliancePct} aria-valuemin={0} aria-valuemax={100}/>
+                    transition: "width 0.3s",
+                  }} role="progressbar" aria-valuenow={compliancePct} aria-valuemin={0} aria-valuemax={100} />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Violations by Column */}
           <div style={{
-            background:"white", border:"1px solid #E5E7EB", borderRadius:6, overflow:"hidden"
+            background: "white", border: "1px solid #E5E7EB", borderRadius: 6, overflow: "hidden"
           }}>
             <div style={{
-              background:"#DC2626", color:"white",
-              padding:"8px 12px", fontSize:11, fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase"
+              background: "#DC2626", color: "white",
+              padding: "8px 12px", fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase"
             }}>Violations by Item</div>
-            <div style={{padding:"10px 12px", display:"flex", flexDirection:"column", gap:5}}>
+            <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 5 }}>
               {CHECK_KEYS.map((k) => (
-                <div key={k} style={{display:"flex", justifyContent:"space-between", alignItems:"center", fontSize:11}}>
-                  <span style={{color:"#374151"}}>{CHECK_LABELS[k]}</span>
+                <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11 }}>
+                  <span style={{ color: "#374151" }}>{CHECK_LABELS[k]}</span>
                   <span style={{
-                    fontWeight:700,
+                    fontWeight: 700,
                     color: colViolations[k] > 0 ? "#DC2626" : "#16A34A",
                   }}>
                     {colViolations[k] > 0 ? colViolations[k] : "✔"}
@@ -767,61 +789,59 @@ export default function SanitationPage() {
             </div>
           </div>
 
-          {/* Legend */}
           <div style={{
-            background:"white", border:"1px solid #E5E7EB", borderRadius:6, padding:"10px 12px"
+            background: "white", border: "1px solid #E5E7EB", borderRadius: 6, padding: "10px 12px"
           }}>
-            <div style={{fontSize:11, fontWeight:700, color:"#374151", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.04em"}}>Legend</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.04em" }}>Legend</div>
             {[
-              { symbol:"✔", bg:"#DCFCE7", border:"#16A34A", color:"#16A34A", label:"Compliant" },
-              { symbol:"✖", bg:"#FEE2E2", border:"#DC2626", color:"#DC2626", label:"Non-Compliant" },
-              { symbol:"—", bg:"#F9FAFB", border:"#D1D5DB", color:"#9CA3AF", label:"Not Checked" },
+              { symbol: "✔", bg: "#DCFCE7", border: "#16A34A", color: "#16A34A", label: "Compliant" },
+              { symbol: "✖", bg: "#FEE2E2", border: "#DC2626", color: "#DC2626", label: "Non-Compliant" },
+              { symbol: "—", bg: "#F9FAFB", border: "#D1D5DB", color: "#9CA3AF", label: "Not Checked" },
             ].map(({ symbol, bg, border, color, label }) => (
-              <div key={symbol} style={{display:"flex", alignItems:"center", gap:8, marginBottom:4}}>
+              <div key={symbol} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                 <div style={{
-                  width:26, height:22, background:bg, border:`1px solid ${border}`,
-                  borderRadius:3, display:"flex", alignItems:"center", justifyContent:"center",
-                  color, fontWeight:700, fontSize:12, flexShrink:0,
+                  width: 26, height: 22, background: bg, border: `1px solid ${border}`,
+                  borderRadius: 3, display: "flex", alignItems: "center", justifyContent: "center",
+                  color, fontWeight: 700, fontSize: 12, flexShrink: 0,
                 }}>{symbol}</div>
-                <span style={{fontSize:11, color:"#6B7280"}}>{label}</span>
+                <span style={{ fontSize: 11, color: "#6B7280" }}>{label}</span>
               </div>
             ))}
           </div>
 
-          {/* History list (scrollable, right panel) */}
           {viewMode === "history" && (
             <div style={{
-              flex:1, background:"white", border:"1px solid #E5E7EB", borderRadius:6,
-              overflow:"hidden", display:"flex", flexDirection:"column", minHeight:150
+              flex: 1, background: "white", border: "1px solid #E5E7EB", borderRadius: 6,
+              overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 150
             }}>
               <div style={{
-                background:"#6B7280", color:"white",
-                padding:"8px 12px", fontSize:11, fontWeight:700, letterSpacing:"0.05em", textTransform:"uppercase"
+                background: "#6B7280", color: "white",
+                padding: "8px 12px", fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase"
               }}>
                 Saved Records
               </div>
-              <div style={{overflowY:"auto", flex:1}}>
+              <div style={{ overflowY: "auto", flex: 1 }}>
                 {history.length === 0 && (
-                  <div style={{padding:16, textAlign:"center", color:"#9CA3AF", fontSize:11}}>
+                  <div style={{ padding: 16, textAlign: "center", color: "#9CA3AF", fontSize: 11 }}>
                     No saved records yet.
                   </div>
                 )}
                 {history.map((h) => (
                   <button
                     key={h.id}
-                    onClick={() => { setHistoryEntry(h); setViewMode("checklist"); }}
+                    onClick={() => fetchFullSession(h.id)}
                     style={{
-                      width:"100%", textAlign:"left", padding:"8px 12px",
-                      borderBottom:"1px solid #F3F4F6", background:"none", cursor:"pointer",
-                      transition:"background 0.1s",
+                      width: "100%", textAlign: "left", padding: "8px 12px",
+                      borderBottom: "1px solid #F3F4F6", background: "none", cursor: "pointer",
+                      transition: "background 0.1s",
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background="#F9FAFB")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background="none")}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#F9FAFB")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
                     aria-label={`View record for ${h.section} on ${h.date}`}
                   >
-                    <div style={{fontWeight:600, fontSize:11, color:"#111827"}}>{h.section}</div>
-                    <div style={{fontSize:10, color:"#6B7280"}}>{h.date}</div>
-                    <div style={{fontSize:10, color:"#9CA3AF"}}>By {h.inspector}</div>
+                    <div style={{ fontWeight: 600, fontSize: 11, color: "#111827" }}>{h.section}</div>
+                    <div style={{ fontSize: 10, color: "#6B7280" }}>{h.date}</div>
+                    <div style={{ fontSize: 10, color: "#9CA3AF" }}>By {h.inspector}</div>
                   </button>
                 ))}
               </div>
@@ -855,11 +875,11 @@ export default function SanitationPage() {
 
 // ─── Small helpers ────────────────────────────────────────────────────────
 
-function StatLine({ label, value, color = "#111827" }: { label:string; value:string; color?:string }) {
+function StatLine({ label, value, color = "#111827" }: { label: string; value: string; color?: string }) {
   return (
-    <div style={{display:"flex", justifyContent:"space-between", fontSize:12}}>
-      <span style={{color:"#6B7280"}}>{label}</span>
-      <span style={{fontWeight:700, color}}>{value}</span>
+    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+      <span style={{ color: "#6B7280" }}>{label}</span>
+      <span style={{ fontWeight: 700, color }}>{value}</span>
     </div>
   );
 }

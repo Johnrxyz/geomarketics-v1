@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import AppShell from "@/components/layout/AppShell";
 import Modal from "@/components/ui/Modal";
 import { Plus, Printer } from "lucide-react";
@@ -16,6 +17,8 @@ export default function ViolationsPage() {
   const [selectedViolation, setSelectedViolation] = useState<any | null>(null);
   const [newViolation, setNewViolation] = useState({ vendor: "", violation_type: "Sanitation", severity: "low", description: "", photo: "" });
   const [submitting, setSubmitting] = useState(false);
+  const searchParams = useSearchParams();
+  const targetId = searchParams.get("id");
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -33,6 +36,15 @@ export default function ViolationsPage() {
   useEffect(() => {
     if (ready) fetchData();
   }, [ready, fetchData]);
+
+  useEffect(() => {
+    if (targetId && violations.length > 0 && !selectedViolation) {
+      const found = violations.find(v => v.id.toString() === targetId);
+      if (found) {
+        setSelectedViolation(found);
+      }
+    }
+  }, [targetId, violations, selectedViolation]);
 
   const handleSubmit = async () => {
     if (!newViolation.vendor || !newViolation.description) return;

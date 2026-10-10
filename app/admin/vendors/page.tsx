@@ -22,12 +22,12 @@ interface Vendor {
 }
 
 const STATUS_OPTIONS = [
-  { value: "owner",                label: "Managed by the Owner",    color: "#374151" },
-  { value: "rented",               label: "With Renter",             color: "#F97316" },
-  { value: "storage",              label: "Bodega",                  color: "#84CC16" },
-  { value: "surrendered_bolante",  label: "Surrendered w/ Bolante",  color: "#FBBF24" },
-  { value: "vacant",               label: "Surrendered / Vacant",    color: "#38BDF8" },
-  { value: "closed",               label: "Closed / No Operation",   color: "#8B5CF6" },
+  { value: "owner", label: "Managed by the Owner", color: "#374151" },
+  { value: "rented", label: "With Renter", color: "#F97316" },
+  { value: "storage", label: "Bodega", color: "#84CC16" },
+  { value: "surrendered_bolante", label: "Surrendered w/ Bolante", color: "#FBBF24" },
+  { value: "vacant", label: "Surrendered / Vacant", color: "#38BDF8" },
+  { value: "closed", label: "Closed / No Operation", color: "#8B5CF6" },
 ];
 
 const VIOLATION_CATEGORIES = [
@@ -64,7 +64,11 @@ export default function VendorManagementPage() {
   const [violationSaving, setViolationSaving] = useState(false);
   const [violationSuccess, setViolationSuccess] = useState(false);
 
-
+  // Add Vendor Modal
+  const [addVendorModalOpen, setAddVendorModalOpen] = useState(false);
+  const [addVendorForm, setAddVendorForm] = useState({ first_name: "", last_name: "", stall: "", email: "", phone: "", products: "" });
+  const [addVendorSaving, setAddVendorSaving] = useState(false);
+  const [availableStalls, setAvailableStalls] = useState<any[]>([]);
 
   useEffect(() => {
     loadVendors();
@@ -184,7 +188,41 @@ export default function VendorManagementPage() {
     }
   }
 
+  function handleOpenAddVendor() {
+    setAddVendorForm({ first_name: "", last_name: "", stall: "", email: "", phone: "", products: "" });
+    setAddVendorModalOpen(true);
+    // Load vacant stalls if not loaded
+    if (availableStalls.length === 0) {
+      stallsApi.list({ page_size: "1000", status: "vacant" }).then((data: any) => {
+        const results = data?.results ?? data ?? [];
+        setAvailableStalls(results);
+      }).catch(console.error);
+    }
+  }
 
+  async function saveNewVendor() {
+    if (!addVendorForm.first_name || !addVendorForm.last_name || !addVendorForm.stall) {
+      alert("Please fill in First Name, Last Name, and select a Stall.");
+      return;
+    }
+    setAddVendorSaving(true);
+    try {
+      await vendorsApi.create({
+        first_name: addVendorForm.first_name,
+        last_name: addVendorForm.last_name,
+        stall: addVendorForm.stall,
+        email: addVendorForm.email,
+        phone: addVendorForm.phone,
+        products: addVendorForm.products,
+      });
+      setAddVendorModalOpen(false);
+      loadVendors(); // Refresh the table
+    } catch (err: any) {
+      alert(err?.detail ?? err?.message ?? "Failed to create vendor.");
+    } finally {
+      setAddVendorSaving(false);
+    }
+  }
 
   function handleViewOnMap(vendor: Vendor) {
     setOpenDropdownId(null);
@@ -209,7 +247,7 @@ export default function VendorManagementPage() {
           <button className="btn btn-ghost" style={{ border: "1px solid var(--border-color)", padding: "var(--space-2) var(--space-4)" }}>
             <Download size={16} /> Export CSV
           </button>
-          <button className="btn btn-primary" style={{ padding: "var(--space-2) var(--space-6)", boxShadow: "var(--shadow-md)" }}>
+          <button className="btn btn-primary" onClick={handleOpenAddVendor} style={{ padding: "var(--space-2) var(--space-6)", boxShadow: "var(--shadow-md)" }}>
             <Plus size={16} /> Add Vendor
           </button>
         </div>
@@ -492,7 +530,65 @@ export default function VendorManagementPage() {
         </div>
       )}
 
+      {/* ── Add Vendor Modal ── */}
+      {addVendorModalOpen && (
+        <div style={overlayStyle}>
+          <div style={{ ...modalStyle, maxWidth: 600 }}>
+            <div style={modalHeaderStyle}>
+              <div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>New Registration</div>
+                <div style={{ fontSize: "18px", fontWeight: 700, marginTop: 2 }}>Add Vendor</div>
+              </div>
+              <button onClick={() => setAddVendorModalOpen(false)} style={closeButtonStyle}><X size={18} /></button>
+            </div>
+            <div style={{ padding: "var(--space-6)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)", marginBottom: "var(--space-4)" }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: "13px", marginBottom: 6 }}>First Name <span style={{ color: "var(--color-error)" }}>*</span></label>
+                  <input type="text" className="form-input" style={{ width: "100%", height: 42, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", padding: "0 12px" }} value={addVendorForm.first_name} onChange={e => setAddVendorForm(f => ({ ...f, first_name: e.target.value }))} placeholder="Juan" />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: "13px", marginBottom: 6 }}>Last Name <span style={{ color: "var(--color-error)" }}>*</span></label>
+                  <input type="text" className="form-input" style={{ width: "100%", height: 42, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", padding: "0 12px" }} value={addVendorForm.last_name} onChange={e => setAddVendorForm(f => ({ ...f, last_name: e.target.value }))} placeholder="Dela Cruz" />
+                </div>
+              </div>
 
+              <div className="form-group" style={{ marginBottom: "var(--space-4)" }}>
+                <label className="form-label" style={{ fontWeight: 600, fontSize: "13px", marginBottom: 6 }}>Assign Stall (Vacant Stalls) <span style={{ color: "var(--color-error)" }}>*</span></label>
+                <select className="form-select" style={{ width: "100%", height: 42, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", padding: "0 12px" }} value={addVendorForm.stall} onChange={e => setAddVendorForm(f => ({ ...f, stall: e.target.value }))}>
+                  <option value="">-- Select a Stall --</option>
+                  {availableStalls.map(s => (
+                    <option key={s.id} value={s.id}>{s.stall_number} ({s.section_name}) - {s.category}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)", marginBottom: "var(--space-4)" }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: "13px", marginBottom: 6 }}>Email</label>
+                  <input type="email" className="form-input" style={{ width: "100%", height: 42, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", padding: "0 12px" }} value={addVendorForm.email} onChange={e => setAddVendorForm(f => ({ ...f, email: e.target.value }))} placeholder="optional@email.com" />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: "13px", marginBottom: 6 }}>Phone</label>
+                  <input type="text" className="form-input" style={{ width: "100%", height: 42, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", padding: "0 12px" }} value={addVendorForm.phone} onChange={e => setAddVendorForm(f => ({ ...f, phone: e.target.value }))} placeholder="09XX XXX XXXX" />
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: "var(--space-6)" }}>
+                <label className="form-label" style={{ fontWeight: 600, fontSize: "13px", marginBottom: 6 }}>Products Sold</label>
+                <input type="text" className="form-input" style={{ width: "100%", height: 42, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", padding: "0 12px" }} value={addVendorForm.products} onChange={e => setAddVendorForm(f => ({ ...f, products: e.target.value }))} placeholder="E.g. Tomatoes, Onions, Garlic..." />
+              </div>
+
+              <div style={{ display: "flex", gap: "var(--space-3)", justifyContent: "flex-end" }}>
+                <button className="btn btn-ghost" onClick={() => setAddVendorModalOpen(false)} style={{ border: "1px solid var(--border-color)" }}>Cancel</button>
+                <button className="btn btn-primary" onClick={saveNewVendor} disabled={addVendorSaving} style={{ minWidth: 120 }}>
+                  {addVendorSaving ? "Saving..." : "Create Vendor"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .table-hover tr:hover { background-color: #f8fafc !important; }

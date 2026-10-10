@@ -3,8 +3,8 @@
 import { useState, useEffect, use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AppShell from "@/components/layout/AppShell";
-import { CheckCircle, User, Phone, Mail, Store, Edit3, Save, ArrowLeft } from "lucide-react";
-import { vendorsApi, stallsApi } from "@/lib/api";
+import { CheckCircle, User, Phone, Mail, Store, Edit3, Save, ArrowLeft, AlertTriangle, MessageSquare } from "lucide-react";
+import { vendorsApi, stallsApi, violationsApi, complaintsApi } from "@/lib/api";
 
 interface Profile {
   id: string | number | null;
@@ -45,6 +45,10 @@ export default function AdminVendorProfilePage({ params }: { params: Promise<{ i
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE);
 
+  const [vendorViolations, setVendorViolations] = useState<any[]>([]);
+  const [vendorComplaints, setVendorComplaints] = useState<any[]>([]);
+  const [recordsLoading, setRecordsLoading] = useState(true);
+
   const [reassignModalOpen, setReassignModalOpen] = useState(false);
   const [newStallNumber, setNewStallNumber] = useState("");
   const [savingReassign, setSavingReassign] = useState(false);
@@ -71,9 +75,24 @@ export default function AdminVendorProfilePage({ params }: { params: Promise<{ i
             ? new Date(data.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })
             : "—",
         });
+
+        // Fetch associated complaints and violations
+        Promise.all([
+          violationsApi.list({ vendor: id.toString() }),
+          complaintsApi.list({ vendor: id.toString() })
+        ]).then(([vData, cData]) => {
+          setVendorViolations(vData?.results ?? vData ?? []);
+          setVendorComplaints(cData?.results ?? cData ?? []);
+        }).catch(err => {
+          console.error("Failed to load records", err);
+        }).finally(() => {
+          setRecordsLoading(false);
+        });
+
       })
       .catch((err: any) => {
         setError(err?.detail ?? err?.message ?? "Failed to load profile.");
+        setRecordsLoading(false);
       })
       .finally(() => setLoading(false));
   }, [id]);
@@ -171,7 +190,7 @@ export default function AdminVendorProfilePage({ params }: { params: Promise<{ i
         </div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)", maxWidth: 640 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 450px), 1fr))", gap: "var(--space-5)", alignItems: "start" }}>
 
         {/* Profile Card */}
         <div className="card">
@@ -271,6 +290,102 @@ export default function AdminVendorProfilePage({ params }: { params: Promise<{ i
           </div>
         </div>
 
+      </div>
+
+      {/* ── Vendor History & Records ── */}
+      <div style={{ marginTop: "var(--space-6)" }}>
+        <h3 style={{ fontSize: "var(--text-lg)", fontWeight: 700, marginBottom: "var(--space-4)" }}>History & Records</h3>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 450px), 1fr))", gap: "var(--space-5)", alignItems: "start" }}>
+          
+          {/* Violations Card */}
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">Violations</div>
+              <AlertTriangle size={18} style={{ color: "var(--color-error)" }} />
+            </div>
+            <div className="card-body" style={{ padding: 0 }}>
+              {recordsLoading ? (
+                <div style={{ padding: "var(--space-4)", color: "var(--text-muted)", fontSize: "14px" }}>Loading...</div>
+              ) : vendorViolations.length === 0 ? (
+                <div style={{ padding: "var(--space-4)", color: "var(--text-muted)", fontSize: "14px" }}>No violations recorded.</div>
+              ) : (
+                <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                  {vendorViolations.map((v, i) => (
+                    <li key={v.id || i} 
+                        onClick={() => router.push(`/admin/violations?id=${v.id}`)}
+                        style={{ 
+                          padding: "var(--space-4)", 
+                          borderBottom: i < vendorViolations.length - 1 ? "1px solid var(--border-color)" : "none",
+                          cursor: "pointer",
+                          transition: "background 0.2s"
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-secondary)"}
+                        onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                        <div style={{ fontWeight: 700, fontSize: "14px" }}>{v.violation_type}</div>
+                        <span className={`badge ${v.severity === 'critical' ? 'badge-error' : v.severity === 'major' ? 'badge-warning' : 'badge-info'}`} style={{ fontSize: "11px", padding: "2px 6px" }}>
+                          {v.severity_display || v.severity}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: 8 }}>
+                        {new Date(v.violation_date || v.created_at).toLocaleDateString()} · Status: <span style={{ fontWeight: 600, color: v.status === 'resolved' ? "var(--color-success)" : "var(--color-warning)" }}>{v.status_display || v.status}</span>
+                      </div>
+                      <div style={{ fontSize: "13px", color: "var(--text-secondary)", background: "var(--surface-color)", padding: "var(--space-3)", borderRadius: "var(--radius-sm)" }}>
+                        {v.description || "No description provided."}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          {/* Complaints Card */}
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">Complaints Filed</div>
+              <MessageSquare size={18} style={{ color: "var(--color-primary)" }} />
+            </div>
+            <div className="card-body" style={{ padding: 0 }}>
+              {recordsLoading ? (
+                <div style={{ padding: "var(--space-4)", color: "var(--text-muted)", fontSize: "14px" }}>Loading...</div>
+              ) : vendorComplaints.length === 0 ? (
+                <div style={{ padding: "var(--space-4)", color: "var(--text-muted)", fontSize: "14px" }}>No complaints filed.</div>
+              ) : (
+                <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                  {vendorComplaints.map((c, i) => (
+                    <li key={c.id || i} 
+                        onClick={() => router.push(`/admin/complaints?id=${c.id}`)}
+                        style={{ 
+                          padding: "var(--space-4)", 
+                          borderBottom: i < vendorComplaints.length - 1 ? "1px solid var(--border-color)" : "none",
+                          cursor: "pointer",
+                          transition: "background 0.2s"
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-secondary)"}
+                        onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                        <div style={{ fontWeight: 700, fontSize: "14px" }}>{c.category}</div>
+                        <span className={`badge ${c.status === 'resolved' ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: "11px", padding: "2px 6px" }}>
+                          {c.status_display || c.status}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: 8 }}>
+                        {new Date(c.created_at).toLocaleDateString()}
+                      </div>
+                      <div style={{ fontSize: "13px", color: "var(--text-secondary)", background: "var(--surface-color)", padding: "var(--space-3)", borderRadius: "var(--radius-sm)" }}>
+                        {c.description || "No description provided."}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+        </div>
       </div>
 
       {/* ── Reassign Stall Modal ── */}

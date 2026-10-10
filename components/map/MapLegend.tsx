@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import {
   MapLayerId,
   MAP_LAYERS,
@@ -20,7 +20,7 @@ interface MapLegendProps {
   stalls?: MarketStall[];
 }
 
-export default function MapLegend({
+function MapLegend({
   activeLayer,
   showAdminLayers,
   offsetLeft = 20,
@@ -48,6 +48,7 @@ export default function MapLegend({
 
   return (
     <div
+      className="map-legend-root"
       style={{
         position: "absolute",
         bottom: offsetBottom,
@@ -66,6 +67,12 @@ export default function MapLegend({
       role="region"
       aria-label="Map legend"
     >
+      {/* Hidden on mobile — the map needs every pixel on small screens */}
+      <style>{`
+        @media (max-width: 767px) {
+          .map-legend-root { display: none !important; }
+        }
+      `}</style>
       {/* Header */}
       <button
         onClick={() => setCollapsed((c) => !c)}
@@ -231,8 +238,8 @@ export default function MapLegend({
                 height: 22,
                 borderRadius: 6,
                 background: "transparent",
-                border: "2px solid #6366F1",
-                boxShadow: "0 0 8px #6366F188, inset 0 0 4px #6366F122",
+                border: "2px solid #FFCB05",
+                boxShadow: "0 0 8px #FFCB0588, inset 0 0 4px #FFCB0522",
                 flexShrink: 0,
               }}
             />
@@ -247,6 +254,8 @@ export default function MapLegend({
     </div>
   );
 }
+
+export default memo(MapLegend);
 
 // ─── Legend Entries ────────────────────────────────────────────────────────────
 

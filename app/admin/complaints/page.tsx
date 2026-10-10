@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import AppShell from "@/components/layout/AppShell";
 import Modal from "@/components/ui/Modal";
 import {
   Search, Plus, AlertCircle, Clock, CheckCircle, Filter,
-  MessageSquare, Store, Calendar, ChevronRight, Send
+  MessageSquare, Store, Calendar, ChevronRight, Send, Flag, ShieldAlert
 } from "lucide-react";
 import { complaintsApi } from "@/lib/api";
 import { useAuthGuard } from "@/lib/useAuthGuard";
@@ -22,6 +23,8 @@ interface Complaint {
   reporter: string;
   notes?: string;
   evidence_file?: string;
+  is_flagged_spam?: boolean;
+  spam_reason?: string;
 }
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
@@ -34,6 +37,17 @@ const STATUS_COLORS: Record<string, string> = {
   open: "badge-open",
   reviewing: "badge-reviewing",
   resolved: "badge-resolved",
+};
+
+const CATEGORY_CONFIG: Record<string, { emoji: string; color: string; bg: string }> = {
+  sanitation:  { emoji: "🧹", color: "#0369A1", bg: "#E0F2FE" },
+  overpricing: { emoji: "💰", color: "#B45309", bg: "#FEF3C7" },
+  safety:      { emoji: "⚠️", color: "#DC2626", bg: "#FEE2E2" },
+  food_safety: { emoji: "🥗", color: "#16A34A", bg: "#DCFCE7" },
+  permit:      { emoji: "📋", color: "#7C3AED", bg: "#F3E8FF" },
+  display:     { emoji: "🏷️", color: "#D97706", bg: "#FEF9C3" },
+  noise:       { emoji: "🔊", color: "#0891B2", bg: "#CFFAFE" },
+  other:       { emoji: "❓", color: "#6B7280", bg: "#F3F4F6" },
 };
 
 function formatDate(dateStr: string): string {
@@ -55,6 +69,7 @@ export default function ComplaintsPage() {
   const [selected, setSelected] = useState<Complaint | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [spamFilter, setSpamFilter] = useState<"all" | "spam" | "clean">("all");
   const [newOpen, setNewOpen] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [newComplaint, setNewComplaint] = useState({
@@ -63,6 +78,9 @@ export default function ComplaintsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "detail">("list");
+  
+  const searchParams = useSearchParams();
+  const targetId = searchParams.get("id");
 
   const fetchComplaints = useCallback(() => {
     setLoading(true);
@@ -82,6 +100,8 @@ export default function ComplaintsPage() {
           reporter: c.reporter_name ?? c.reporter ?? "Anonymous",
           notes: c.resolution_notes ?? c.notes ?? "",
           evidence_file: c.evidence_file,
+          is_flagged_spam: c.is_flagged_spam ?? false,
+          spam_reason: c.spam_reason ?? "",
         }));
         setComplaints(mapped);
       })
@@ -114,6 +134,16 @@ export default function ComplaintsPage() {
     }
   }, [ready, fetchComplaints, fetchSummary]);
 
+  useEffect(() => {
+    if (targetId && complaints.length > 0 && !selected) {
+      const found = complaints.find(c => c.id.toString() === targetId);
+      if (found) {
+        setSelected(found);
+        setMobileView("detail");
+      }
+    }
+  }, [targetId, complaints, selected]);
+
   // Derive summary counts from local list when API summary is unavailable
   const open = summary.open || complaints.filter((c) => c.status === "open").length;
   const reviewing = summary.reviewing || complaints.filter((c) => c.status === "reviewing").length;
@@ -127,7 +157,8 @@ export default function ComplaintsPage() {
       c.vendor.toLowerCase().includes(s) ||
       c.description.toLowerCase().includes(s);
     const matchStatus = statusFilter === "All" || c.status === statusFilter;
-    return matchSearch && matchStatus;
+    const matchSpam = spamFilter === "all" || (spamFilter === "spam" ? c.is_flagged_spam : !c.is_flagged_spam);
+    return matchSearch && matchStatus && matchSpam;
   });
 
   const updateStatus = async (id: string, status: "open" | "reviewing" | "resolved") => {
@@ -152,6 +183,23 @@ export default function ComplaintsPage() {
       alert("Successfully escalated to Blotter.");
     } catch (err: any) {
       alert(err?.detail ?? err?.message ?? "Failed to escalate to Blotter.");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const toggleSpamFlag = async (c: Complaint) => {
+    setUpdating(true);
+    try {
+      const newFlag = !c.is_flagged_spam;
+      await complaintsApi.flagSpam(c.id, newFlag);
+      const updater = (prev: Complaint[]) =>
+        prev.map(x => x.id === c.id ? { ...x, is_flagged_spam: newFlag, spam_reason: newFlag ? 'Manually flagged by admin' : '' } : x);
+      setComplaints(updater);
+      if (selected?.id === c.id)
+        setSelected(prev => prev ? { ...prev, is_flagged_spam: newFlag, spam_reason: newFlag ? 'Manually flagged by admin' : '' } : null);
+    } catch (err: any) {
+      alert(err?.detail ?? err?.message ?? "Failed to update spam flag.");
     } finally {
       setUpdating(false);
     }
@@ -242,6 +290,12 @@ export default function ComplaintsPage() {
               <option value="reviewing">Reviewing</option>
               <option value="resolved">Resolved</option>
             </select>
+            <select className="form-select" value={spamFilter}
+              onChange={(e) => setSpamFilter(e.target.value as any)} aria-label="Filter by spam">
+              <option value="all">All Complaints</option>
+              <option value="spam">🚩 Spam Only</option>
+              <option value="clean">✅ Non-Spam Only</option>
+            </select>
           </div>
 
           {/* List */}
@@ -270,17 +324,29 @@ export default function ComplaintsPage() {
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-accent)" }}>
                     {c.id}
                   </span>
-                  <span className={`badge ${STATUS_COLORS[c.status]} badge-dot`} style={{ textTransform: "capitalize" }}>
-                    {c.status}
-                  </span>
+                  <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                    {c.is_flagged_spam && (
+                      <span style={{ background: "#FEE2E2", color: "#DC2626", fontSize: "10px", fontWeight: 800, padding: "2px 7px", borderRadius: "var(--radius-full)", display: "flex", alignItems: "center", gap: 3 }}>
+                        <Flag size={10} /> SPAM
+                      </span>
+                    )}
+                    <span className={`badge ${STATUS_COLORS[c.status]} badge-dot`} style={{ textTransform: "capitalize" }}>
+                      {c.status}
+                    </span>
+                  </div>
                 </div>
                 <div style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--text-primary)" }}>{c.vendor}</div>
                 <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {c.description}
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
-                  <span><Store size={10} style={{ display: "inline", marginRight: 3 }} />Stall {c.stall}</span>
-                  <span><Calendar size={10} style={{ display: "inline", marginRight: 3 }} />{c.date}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
+                  {(() => { const cfg = CATEGORY_CONFIG[c.category.toLowerCase()] ?? CATEGORY_CONFIG.other; return (
+                    <span style={{ fontSize: "11px", fontWeight: 700, background: cfg.bg, color: cfg.color, padding: "2px 7px", borderRadius: "var(--radius-full)", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                      {cfg.emoji} {c.category}
+                    </span>
+                  ); })()}
+                  <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 3 }}><Store size={10} />Stall {c.stall}</span>
+                  <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 3 }}><Calendar size={10} />{c.date}</span>
                 </div>
               </button>
             ))}
@@ -306,8 +372,19 @@ export default function ComplaintsPage() {
                     <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
                       <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--color-accent)" }}>{selected.id}</span>
                       <span className={`badge ${STATUS_COLORS[selected.status]} badge-dot`} style={{ textTransform: "capitalize" }}>{selected.status}</span>
+                      {selected.is_flagged_spam && (
+                        <span style={{ background: "#FEE2E2", color: "#DC2626", fontSize: "11px", fontWeight: 800, padding: "2px 10px", borderRadius: "var(--radius-full)", display: "flex", alignItems: "center", gap: 4 }}>
+                          <ShieldAlert size={12} /> SPAM
+                        </span>
+                      )}
                     </div>
-                    <div style={{ fontSize: "var(--text-lg)", fontWeight: 700, marginTop: "var(--space-1)" }}>{selected.category}</div>
+                    <div style={{ marginTop: "var(--space-2)" }}>
+                      {(() => { const cfg = CATEGORY_CONFIG[selected.category.toLowerCase()] ?? CATEGORY_CONFIG.other; return (
+                        <span style={{ fontSize: "13px", fontWeight: 700, background: cfg.bg, color: cfg.color, padding: "4px 12px", borderRadius: "var(--radius-full)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 16 }}>{cfg.emoji}</span> {selected.category}
+                        </span>
+                      ); })()}
+                    </div>
                   </div>
                 </div>
                 <div className="card-body">
@@ -346,6 +423,17 @@ export default function ComplaintsPage() {
                     )}
                   </div>
 
+                  {/* Spam Reason */}
+                  {selected.is_flagged_spam && selected.spam_reason && (
+                    <div style={{ padding: "var(--space-3) var(--space-4)", background: "#FEF2F2", borderRadius: "var(--radius-sm)", border: "1px solid #F87171", display: "flex", gap: 8, alignItems: "flex-start" }}>
+                      <ShieldAlert size={15} color="#DC2626" style={{ flexShrink: 0, marginTop: 1 }} />
+                      <div>
+                        <div style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "#DC2626", textTransform: "uppercase", letterSpacing: "0.05em" }}>Spam Flag Reason</div>
+                        <p style={{ fontSize: "var(--text-sm)", color: "#991B1B", margin: 0 }}>{selected.spam_reason}</p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Notes */}
                   {selected.notes && (
                     <div style={{ padding: "var(--space-3) var(--space-4)", background: "#DBEAFE", borderRadius: "var(--radius-sm)" }}>
@@ -383,6 +471,21 @@ export default function ComplaintsPage() {
                   <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap", marginTop: "var(--space-4)", paddingTop: "var(--space-4)", borderTop: "1px solid var(--border-color)" }}>
                     <button className="btn btn-danger" onClick={() => escalateToBlotter(selected.id)} disabled={updating}>
                       <AlertCircle size={14} /> Escalate to Blotter
+                    </button>
+                    <button
+                      onClick={() => toggleSpamFlag(selected)}
+                      disabled={updating}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 6,
+                        padding: "8px 14px", borderRadius: "var(--radius-md)",
+                        fontWeight: 700, fontSize: "var(--text-sm)", cursor: "pointer", border: "none",
+                        background: selected.is_flagged_spam ? "#DCFCE7" : "#FEE2E2",
+                        color: selected.is_flagged_spam ? "#16A34A" : "#DC2626",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      <Flag size={14} />
+                      {selected.is_flagged_spam ? "Unflag Spam" : "Flag as Spam"}
                     </button>
                   </div>
                 </div>

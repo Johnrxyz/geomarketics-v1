@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import {
   TrendingUp, TrendingDown, Minus, Activity, ShoppingBag, MapPin, Search,
@@ -10,7 +10,7 @@ import {
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceDot } from "recharts";
 import { complaintsApi, stallsApi } from "@/lib/api";
 import MarketMap, { MarketStall, OCCUPANCY_CONFIG } from "@/components/map/MarketMap";
-import { LEGACY_TO_OCCUPANCY, LEGACY_TO_COMPLIANCE, MAP_CONFIGS, ANNEX_CONFIGS, COMBINED_BRIDGE_GAP, BuildingId } from "@/components/map/types";
+import { LEGACY_TO_OCCUPANCY, LEGACY_TO_COMPLIANCE, MAP_CONFIGS, ANNEX_CONFIGS, COMBINED_BRIDGE_GAP, BuildingId, FloorId } from "@/components/map/types";
 import { getLegendEntries } from "@/components/map/MapLegend";
 import { RECIPES, Recipe } from "../data/recipes";
 import LoginModal from "@/components/auth/LoginModal";
@@ -48,13 +48,31 @@ const MARKETS = [
   { id: 'imus', name: 'Imus Public Market' }
 ];
 
-const CONSUMER_FLOOR = '1' as const;
-const CONSUMER_ANNEX_CFG = ANNEX_CONFIGS[CONSUMER_FLOOR];
-const CONSUMER_MAIN_CFG = MAP_CONFIGS.main[CONSUMER_FLOOR];
-const CONSUMER_MAIN_Y_OFFSET = CONSUMER_ANNEX_CFG.height + COMBINED_BRIDGE_GAP;
-const CONSUMER_ANNEX_X_OFFSET = Math.floor((CONSUMER_MAIN_CFG.width - CONSUMER_ANNEX_CFG.width) / 2);
+// Per-floor canvas layout for the unified (Main + Annex) view.
+// Must mirror MarketMap's geometry: Annex on top, bridge strip, Main below.
+const BRIDGE_WALKWAY_W = 150; // keep in sync with the bridge rendering in MarketMap
+const getFloorLayout = (floor: FloorId) => {
+  const main = MAP_CONFIGS.main[floor];
+  const annex = ANNEX_CONFIGS[floor];
+  return {
+    mainYOffset: annex.height + COMBINED_BRIDGE_GAP,
+    annexXOffset: Math.floor((main.width - annex.width) / 2),
+    annexHeight: annex.height,
+    // Bridge center x in canvas coords (canvas x == Main-building x)
+    bridgeCenterX: (main.width - BRIDGE_WALKWAY_W) / 2 - BRIDGE_WALKWAY_W / 2,
+  };
+};
 
-const toCanvasCoords = (s: { svg_x: number; svg_y: number; building?: string; svg_cell_id?: string }) => {
+const blurName = (name: string) => {
+  if (!name || name === "—" || name === "Vacant") return name;
+  return name.split(' ').map(word => {
+    if (word.length <= 1) return word;
+    return word[0] + '*'.repeat(word.length - 1);
+  }).join(' ');
+};
+
+const toCanvasCoords = (s: { svg_x: number; svg_y: number; building?: string; floor?: FloorId; svg_cell_id?: string }) => {
+  const layout = getFloorLayout(s.floor || '1');
   let x = s.svg_x;
   let y = s.svg_y;
 
@@ -89,21 +107,52 @@ const toCanvasCoords = (s: { svg_x: number; svg_y: number; building?: string; sv
   }
 
   if (s.building === 'main') {
-    y += CONSUMER_MAIN_Y_OFFSET;
+    y += layout.mainYOffset;
   } else if (s.building === 'annex') {
-    x += CONSUMER_ANNEX_X_OFFSET;
+    x += layout.annexXOffset;
   }
   return { x, y };
 };
 
-const LANDMARKS = [
-  { id: "elevator", svg_x: 2173, svg_y: 1978, label: "Elevator", building: "main" },
-  { id: "market-office", svg_x: 3790, svg_y: 450, label: "Market Office", building: "main" },
-  { id: "information", svg_x: 2173, svg_y: 2900, label: "Information", building: "main" }
+// ─── Floor & building-aware landmarks ────────────────────────────────────────
+// Coordinates are in each building's own SVG space for its floor; toCanvasCoords
+// applies the unified-canvas offsets. Bridge landings are derived from the same
+// geometry MarketMap uses to draw the bridge strip.
+
+interface MapLandmark {
+  id: string;
+  label: string;
+  building: BuildingId;
+  floor: FloorId;
+  svg_x: number;
+  svg_y: number;
+}
+
+const F1_LAYOUT = getFloorLayout('1');
+const F2_LAYOUT = getFloorLayout('2');
+
+const LANDMARKS: MapLandmark[] = [
+  // ── Main Building — 1st Floor ──
+  { id: "elevator-1f", svg_x: 2173, svg_y: 1978, label: "Elevator", building: "main", floor: "1" },
+  { id: "market-office", svg_x: 3790, svg_y: 450, label: "Market Office", building: "main", floor: "1" },
+  { id: "information", svg_x: 2173, svg_y: 2900, label: "Information", building: "main", floor: "1" },
+  { id: "bridge-main-1f", svg_x: F1_LAYOUT.bridgeCenterX, svg_y: 80, label: "Connecting Bridge (Main)", building: "main", floor: "1" },
+  // ── Main Building — 2nd Floor ── (elevator/stairs sit above the 1F shaft; the 2F plan is wider)
+  { id: "elevator-2f", svg_x: 2365, svg_y: 1975, label: "Elevator (2nd Floor)", building: "main", floor: "2" },
+  { id: "stairs-2f", svg_x: 2365, svg_y: 2850, label: "Stairs (2nd Floor)", building: "main", floor: "2" },
+  { id: "bridge-main-2f", svg_x: F2_LAYOUT.bridgeCenterX, svg_y: 80, label: "Connecting Bridge (Main)", building: "main", floor: "2" },
+  // ── Annex ── (bridge landing at the Annex's road-facing bottom edge)
+  { id: "bridge-annex-1f", svg_x: F1_LAYOUT.bridgeCenterX - F1_LAYOUT.annexXOffset, svg_y: F1_LAYOUT.annexHeight - 80, label: "Connecting Bridge (Annex)", building: "annex", floor: "1" },
+  { id: "bridge-annex-2f", svg_x: F2_LAYOUT.bridgeCenterX - F2_LAYOUT.annexXOffset, svg_y: F2_LAYOUT.annexHeight - 80, label: "Connecting Bridge (Annex)", building: "annex", floor: "2" },
 ];
 
-const getClosestEntrance = (targetX: number, targetY: number) => {
-  const ENTRANCES = LANDMARKS.map(l => {
+const getClosestEntrance = (targetX: number, targetY: number, building: BuildingId, floor: FloorId) => {
+  // Only landmarks in the same building AND on the same floor are valid route starts.
+  let candidates = LANDMARKS.filter(l => l.building === building && l.floor === floor);
+  if (candidates.length === 0) candidates = LANDMARKS.filter(l => l.floor === floor);
+  if (candidates.length === 0) candidates = LANDMARKS;
+
+  const ENTRANCES = candidates.map(l => {
     const { x, y } = toCanvasCoords(l);
     return { id: l.id, x, y, label: l.label };
   });
@@ -158,8 +207,8 @@ export default function LucenaDecisionSupport() {
   // State for Smart Ulam Calculator
   const [activeRecipe, setActiveRecipe] = useState<Recipe | null>(null);
 
-  // State for Comparisons
-  const [compareTarget, setCompareTarget] = useState('tanza');
+  // State for Comparisons (used only in admin dashboard now)
+  const compareTarget = 'tanza'; // kept as constant; full state moved to admin dashboard
 
   // State for Budget Planner
   const [budget, setBudget] = useState<string>("500");
@@ -191,8 +240,39 @@ export default function LucenaDecisionSupport() {
   const [mapSearch, setMapSearch] = useState("");
   const [selectedMapStallId, setSelectedMapStallId] = useState<string | null>(null);
   const [highlightedMapStallIds, setHighlightedMapStallIds] = useState<string[]>([]);
-  const [navigationRoute, setNavigationRoute] = useState<{ points: { x: number, y: number, label: string }[], totalDistanceMeters: number } | null>(null);
+  const [navigationRoute, setNavigationRoute] = useState<{ points: { x: number, y: number, label: string }[], totalDistanceMeters: number, floor?: FloorId } | null>(null);
+  const [mapFloor, setMapFloor] = useState<FloorId>('1');
   const [isMobilePanelExpanded, setIsMobilePanelExpanded] = useState(false);
+
+  // Dynamically compute available categories from loaded mapStalls
+  const mapCategories = useMemo(() => {
+    const cats = new Set(mapStalls.map(s => {
+      const c = (s.category || "").trim();
+      return c ? c.charAt(0).toUpperCase() + c.slice(1) : "";
+    }).filter(Boolean));
+    return Array.from(cats).sort();
+  }, [mapStalls]);
+
+  const handleQuickCategorySearch = (category: string) => {
+    setMapSearch(category);
+    const q = category.toLowerCase();
+    const stallCat = mapStalls.find(s => s.category.toLowerCase().includes(q));
+    if (stallCat && stallCat.floor !== mapFloor) {
+      setMapFloor(stallCat.floor);
+    }
+  };
+
+  // Auto-highlight stalls when mapSearch changes
+  useEffect(() => {
+    if (mapSearch.trim() && !navigationRoute) {
+      const q = mapSearch.toLowerCase();
+      const matches = mapStalls.filter(s => s.category.toLowerCase().includes(q) || s.number.toLowerCase().includes(q)).map(s => s.id);
+      setHighlightedMapStallIds(matches);
+    } else if (!mapSearch.trim() && !navigationRoute) {
+      setHighlightedMapStallIds([]);
+    }
+  }, [mapSearch, mapStalls, navigationRoute]);
+
 
   useEffect(() => {
     async function loadStalls() {
@@ -463,10 +543,8 @@ export default function LucenaDecisionSupport() {
               return { id: m.id.toString(), name: m.name, basketCost };
             });
 
+          // marketsData and compareTarget are now managed in the admin dashboard
           setMarketsData(liveMarkets);
-          if (liveMarkets.length > 0) {
-            setCompareTarget(liveMarkets[0].id);
-          }
         }
       } catch (error) {
         console.error("Failed to load live data, falling back to mock:", error);
@@ -483,7 +561,7 @@ export default function LucenaDecisionSupport() {
   const getRecipeCost = (recipe: Recipe | null) => {
     let lucenaTotal = 0;
     let compareTotal = 0;
-    const mockCompareFactor = compareTarget === 'regional' ? 1 : compareTarget === 'tanza' ? 0.95 : 1.05;
+    const mockCompareFactor = 0.95; // compareTarget is 'tanza' (constant); moved to admin dashboard
 
     if (!recipe) return { lucenaTotal: 0, compareTotal: 0, savings: 0, breakdown: [] };
 
@@ -574,12 +652,65 @@ export default function LucenaDecisionSupport() {
   const expensiveUlam = ulamRankings[ulamRankings.length - 1];
   const bestValueUlam = ulamRankings.slice().sort((a, b) => b.savings - a.savings)[0];
 
-  // Get Today's Best Deals
-  const bestDealsList = staples
-    .filter(s => s.regionalAvg > 0)
-    .map(s => ({ ...s, savingsPercent: ((s.regionalAvg - s.price) / s.regionalAvg) * 100 }))
-    .sort((a, b) => b.savingsPercent - a.savingsPercent)
-    .slice(0, 3);
+  // bestDealsList moved to admin dashboard
+
+  // Shared "Find Ingredients in Market" handler
+  const handleFindInMarket = (recipe = activeRecipe) => {
+    if (!recipe) return;
+    const cost = getRecipeCost(recipe);
+
+    let currentPos: { x: number; y: number } | null = null;
+    let routeFloor: FloorId = mapFloor;
+
+    for (const ing of cost.breakdown) {
+      const matches = mapStalls.filter(s => s.category.toLowerCase().includes(ing.commodityName.toLowerCase()));
+      if (matches.length > 0) {
+        routeFloor = matches[0].floor;
+        const canvasCoords = toCanvasCoords(matches[0]);
+        const entrance = getClosestEntrance(canvasCoords.x, canvasCoords.y, matches[0].building, routeFloor);
+        currentPos = { x: entrance.x, y: entrance.y };
+        break;
+      }
+    }
+
+    if (!currentPos) return;
+
+    const dist = { value: 0 };
+    const entranceLabel = LANDMARKS.find(l => {
+      const c = toCanvasCoords(l);
+      return c.x === currentPos!.x && c.y === currentPos!.y;
+    })?.label || "Entrance";
+
+    const routePoints = [{ x: currentPos.x, y: currentPos.y, label: entranceLabel }];
+    const highlighted: string[] = [];
+    let pos = currentPos;
+
+    cost.breakdown.forEach(ing => {
+      const query = ing.commodityName.toLowerCase();
+      const matches = mapStalls.filter(s => s.category.toLowerCase().includes(query) && s.floor === routeFloor);
+      if (matches.length > 0) {
+        const nearest = matches.reduce((prev, curr) => {
+          const prevC = toCanvasCoords(prev);
+          const currC = toCanvasCoords(curr);
+          const dPrev = Math.sqrt(Math.pow(prevC.x - pos.x, 2) + Math.pow(prevC.y - pos.y, 2));
+          const dCurr = Math.sqrt(Math.pow(currC.x - pos.x, 2) + Math.pow(currC.y - pos.y, 2));
+          return dCurr < dPrev ? curr : prev;
+        });
+        const nearestCanvas = toCanvasCoords(nearest);
+        dist.value += Math.floor(Math.sqrt(Math.pow(nearestCanvas.x - pos.x, 2) + Math.pow(nearestCanvas.y - pos.y, 2)) / 50);
+        routePoints.push({ x: nearestCanvas.x, y: nearestCanvas.y, label: `${ing.commodityName} (Stall ${nearest.number})` });
+        highlighted.push(nearest.id);
+        pos = nearestCanvas;
+      }
+    });
+
+    if (routeFloor !== mapFloor) setMapFloor(routeFloor);
+    setNavigationRoute({ points: routePoints, totalDistanceMeters: dist.value, floor: routeFloor });
+    setHighlightedMapStallIds(highlighted);
+    setMapSearch("");
+    setSelectedMapStallId(null);
+    document.getElementById('market-navigator')?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: "#F8FAFC", fontFamily: "var(--font-sans)", color: "var(--text-primary)" }}>
@@ -1034,24 +1165,38 @@ export default function LucenaDecisionSupport() {
               onStallSelect={(s) => setSelectedMapStallId(s ? s.id : null)}
               onGetDirections={(stall) => {
                 const stallCanvas = toCanvasCoords(stall);
-                const entrance = getClosestEntrance(stallCanvas.x, stallCanvas.y);
+                const entrance = getClosestEntrance(stallCanvas.x, stallCanvas.y, stall.building, stall.floor);
+                // Close the info bubble so the route zoom-out is unobstructed
+                setSelectedMapStallId(null);
+                // Jump the map to the stall's floor so the route is immediately visible
+                if (stall.floor !== mapFloor) setMapFloor(stall.floor);
                 setNavigationRoute({
                   points: [
                     { x: entrance.x, y: entrance.y, label: entrance.label },
                     { x: stallCanvas.x, y: stallCanvas.y, label: `Stall ${stall.number}` }
                   ],
-                  totalDistanceMeters: Math.floor(Math.sqrt(Math.pow(stallCanvas.x - entrance.x, 2) + Math.pow(stallCanvas.y - entrance.y, 2)) / 50)
+                  totalDistanceMeters: Math.floor(Math.sqrt(Math.pow(stallCanvas.x - entrance.x, 2) + Math.pow(stallCanvas.y - entrance.y, 2)) / 50),
+                  floor: stall.floor
                 });
               }}
               showAdminLayers={false}
               hideFloatingControls={true}
               unifiedFloorView={true}
+              initialFloor={mapFloor}
+              onBuildingFloorChange={(_b, f) => {
+                if (f !== mapFloor) {
+                  // Manual floor switch: the route and selection belong to the old floor
+                  setMapFloor(f);
+                  setNavigationRoute(null);
+                  setSelectedMapStallId(null);
+                }
+              }}
               padding={{ top: 20, right: 20, bottom: 20, left: 20 }}
             />
           </div>
 
           {/* Floating Google-Maps Style UI Container */}
-          <div style={{ position: "absolute", top: "24px", left: "24px", zIndex: 10, width: "380px", maxWidth: "calc(100% - 48px)", display: "flex", flexDirection: "column", gap: "12px", maxHeight: "calc(100% - 48px)", pointerEvents: "none" }}>
+          <div className="map-floating-panel" style={{ position: "absolute", top: "24px", left: "24px", zIndex: 10, width: "380px", maxWidth: "calc(100% - 48px)", display: "flex", flexDirection: "column", gap: "12px", maxHeight: "calc(100% - 48px)", pointerEvents: "none" }}>
 
             {/* Search Box */}
             <div style={{ pointerEvents: "auto", background: "white", borderRadius: "var(--radius-full)", padding: "12px 20px", display: "flex", alignItems: "center", gap: "12px", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "1px solid #E2E8F0" }}>
@@ -1070,6 +1215,27 @@ export default function LucenaDecisionSupport() {
               )}
             </div>
 
+            {/* Quick Categories */}
+            {mapCategories.length > 0 && (
+              <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "4px", pointerEvents: "auto", paddingLeft: "4px" }}>
+                {mapCategories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => handleQuickCategorySearch(cat)}
+                    style={{
+                      padding: "6px 14px", background: mapSearch.toLowerCase() === cat.toLowerCase() ? "var(--color-primary)" : "white",
+                      border: "1px solid #E2E8F0", borderRadius: "100px",
+                      fontSize: "12px", fontWeight: 800, color: mapSearch.toLowerCase() === cat.toLowerCase() ? "white" : "var(--text-primary)", cursor: "pointer",
+                      whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+                      transition: "all 0.2s"
+                    }}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <style>{`
               .floating-results::-webkit-scrollbar { width: 6px; }
               .floating-results::-webkit-scrollbar-track { background: transparent; }
@@ -1077,6 +1243,8 @@ export default function LucenaDecisionSupport() {
               @media (max-width: 768px) {
                 .hide-on-mobile { display: none !important; }
                 .mobile-map-container { height: 90vh !important; min-height: 500px !important; border-radius: 0 !important; border-left: none !important; border-right: none !important; }
+                /* Collapse the floating panel to a slim top bar so the map keeps full width/height */
+                .map-floating-panel { top: 12px !important; left: 12px !important; right: 12px !important; width: auto !important; max-width: none !important; max-height: 42% !important; }
               }
             `}</style>
 
@@ -1096,7 +1264,7 @@ export default function LucenaDecisionSupport() {
                         {navigationRoute.points[navigationRoute.points.length - 1].label}
                       </div>
                       <span style={{ fontSize: "11px", color: "#166534", fontWeight: 800, marginLeft: "4px", padding: "2px 6px", background: "#D1FAE5", borderRadius: "100px", whiteSpace: "nowrap" }}>
-                        ~{navigationRoute.totalDistanceMeters}m
+                        ~{navigationRoute.totalDistanceMeters}m · {Math.max(1, Math.ceil(navigationRoute.totalDistanceMeters / 70))} min walk
                       </span>
                     </div>
                   </div>
@@ -1122,7 +1290,7 @@ export default function LucenaDecisionSupport() {
                 return results.slice(0, query ? 10 : 1).map(stall => (
                   <div key={stall.id} style={{ padding: "16px", background: "white", borderRadius: "var(--radius-lg)", border: selectedMapStallId === stall.id ? "2px solid var(--color-primary)" : "1px solid #E2E8F0", cursor: "pointer", flexShrink: 0, boxShadow: "0 8px 30px rgba(0,0,0,0.08)", transition: "all 0.2s" }} onClick={() => setSelectedMapStallId(stall.id)}>
                     <div style={{ fontSize: "12px", fontWeight: 800, color: "var(--color-primary)", marginBottom: 4 }}>STALL {stall.number}</div>
-                    <div style={{ fontSize: "16px", fontWeight: 800, color: "var(--text-primary)", marginBottom: 8 }}>{stall.vendor !== "—" && stall.vendor !== "Vacant" ? "Registered Vendor" : "Vacant Stall"}</div>
+                    <div style={{ fontSize: "16px", fontWeight: 800, color: "var(--text-primary)", marginBottom: 8 }}>{stall.vendor !== "—" && stall.vendor !== "Vacant" ? blurName(stall.vendor) : "Vacant Stall"}</div>
                     <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: 4 }}><span style={{ fontWeight: 700 }}>Category:</span> {stall.category}</div>
                     <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: 12 }}><span style={{ fontWeight: 700 }}>Products:</span> Assorted {stall.category.toLowerCase()}</div>
                     <div style={{ display: "flex", gap: "8px" }}>
@@ -1132,13 +1300,16 @@ export default function LucenaDecisionSupport() {
                       <button className="btn btn-ghost" style={{ padding: "8px", fontSize: "12px", background: "#F1F5F9", display: "flex", justifyContent: "center", alignItems: "center" }} onClick={(e) => {
                         e.stopPropagation();
                         const stallCanvas = toCanvasCoords(stall);
-                        const entrance = getClosestEntrance(stallCanvas.x, stallCanvas.y);
+                        const entrance = getClosestEntrance(stallCanvas.x, stallCanvas.y, stall.building, stall.floor);
+                        setSelectedMapStallId(null);
+                        if (stall.floor !== mapFloor) setMapFloor(stall.floor);
                         setNavigationRoute({
                           points: [
                             { x: entrance.x, y: entrance.y, label: entrance.label },
                             { x: stallCanvas.x, y: stallCanvas.y, label: `Stall ${stall.number}` }
                           ],
-                          totalDistanceMeters: Math.floor(Math.sqrt(Math.pow(stallCanvas.x - entrance.x, 2) + Math.pow(stallCanvas.y - entrance.y, 2)) / 50)
+                          totalDistanceMeters: Math.floor(Math.sqrt(Math.pow(stallCanvas.x - entrance.x, 2) + Math.pow(stallCanvas.y - entrance.y, 2)) / 50),
+                          floor: stall.floor
                         });
                       }}>
                         Directions
@@ -1170,425 +1341,216 @@ export default function LucenaDecisionSupport() {
         </div>
 
 
-        {/* Multi-Column Layout for Middle Sections */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 400px), 1fr))", gap: "var(--space-8)", marginBottom: "var(--space-10)" }}>
-
-          {/* Left Column */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-8)" }}>
-
-            {/* Section 4: Lucena Price Fairness Index™ & Best Deals */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 350px), 1fr))", gap: "var(--space-6)", marginBottom: "var(--space-8)" }}>
-
-              <div className="card" style={{ padding: "var(--space-6)", background: "linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)", border: "1px solid #E2E8F0", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)" }}>
-                <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", fontWeight: 800, color: "var(--text-muted)", letterSpacing: "1px", marginBottom: "var(--space-4)" }}>
-                  Signature Metric
-                </div>
-                <div style={{ marginBottom: "var(--space-2)" }}>
-                  <span style={{ fontSize: "64px", fontWeight: 900, color: "var(--color-accent)", lineHeight: 1, letterSpacing: "-2px" }}>87</span>
-                  <span style={{ fontSize: "var(--text-xl)", color: "var(--text-muted)", fontWeight: 700 }}>/100</span>
-                </div>
-                <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "#16A34A", margin: "0 0 var(--space-1) 0" }}>Fair Market Pricing</h2>
-                <p style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
-                  Lucena Prices Index™ indicates generally affordable staple goods and stable protein prices compared to the regional average, despite some volatility in vegetables.
-                </p>
+        {/* ═══ Unified Smart Meal Planner ═══ */}
+        <div className="card" style={{ border: "1px solid var(--color-primary)", marginBottom: "var(--space-10)" }}>
+          {/* Header */}
+          <div className="card-header" style={{ background: "var(--color-primary-pale)", borderBottom: "1px solid #FDE047", padding: "var(--space-4) var(--space-5)" }}>
+            <div>
+              <h3 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "var(--color-accent)", margin: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+                <ChefHat size={18} /> Smart Meal Planner
+              </h3>
+              <div style={{ fontSize: "var(--text-xs)", color: "var(--color-accent)", opacity: 0.8, marginTop: 2 }}>
+                Pick a dish or set your budget — then find all the ingredients in the market in one tap
               </div>
+            </div>
+          </div>
 
-              <div className="card" style={{ padding: "var(--space-6)" }}>
-                <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "var(--color-accent)", margin: "0 0 var(--space-4) 0", display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-                  <Star size={18} color="var(--color-primary)" fill="var(--color-primary)" /> Best Deals Today (Lucena Rank)
-                </h2>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "var(--space-4)" }}>
-                  {bestDealsList.length > 0 ? bestDealsList.map((deal, idx) => {
-                    const colors = [
-                      { bg: "#F0FDF4", border: "#16A34A", text: "#166534", sub: "#15803D" },
-                      { bg: "#EFF6FF", border: "#2563EB", text: "#1E3A8A", sub: "#1D4ED8" },
-                      { bg: "#FFFBEB", border: "#D97706", text: "#92400E", sub: "#B45309" }
-                    ];
-                    const c = colors[idx % 3];
+          {/* Body: Two-panel layout */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))" }}>
 
-                    return (
-                      <div key={deal.id} style={{ padding: "var(--space-4)", background: c.bg, borderRadius: "var(--radius-md)", borderLeft: `4px solid ${c.border}`, transition: "transform 0.2s", cursor: "pointer" }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
-                        <div style={{ fontSize: "var(--text-xs)", color: c.text, fontWeight: 700, textTransform: "uppercase" }}>🏆 #{idx + 1} Cheapest</div>
-                        <div style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: c.text, marginTop: 4 }}>{deal.name}</div>
-                        <div style={{ fontSize: "var(--text-sm)", color: c.sub, marginTop: 2 }}>{deal.savingsPercent > 0 ? `${deal.savingsPercent.toFixed(0)}% below region` : 'in the Region'}</div>
+            {/* ── LEFT: Discovery & Budgeting ── */}
+            <div style={{ padding: "var(--space-5)", borderRight: "1px solid #E5E7EB", display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
+
+              {/* Today's Sulit Picks */}
+              <div>
+                <div style={{ fontSize: "11px", fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "var(--space-3)" }}>
+                  ✨ Today's Sulit Picks
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+                  {cheapestUlam && (
+                    <button
+                      onClick={() => setActiveRecipe(cheapestUlam.recipe)}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "var(--space-3) var(--space-4)",
+                        background: activeRecipe?.id === cheapestUlam.recipe.id ? "#DCFCE7" : "#F0FDF4",
+                        border: activeRecipe?.id === cheapestUlam.recipe.id ? "2px solid #16A34A" : "1.5px solid #DCFCE7",
+                        borderRadius: "var(--radius-md)", cursor: "pointer", transition: "all 0.15s", textAlign: "left", width: "100%"
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: "10px", color: "#166534", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em" }}>🟢 Cheapest Dish</div>
+                        <div style={{ fontSize: "var(--text-md)", fontWeight: 800, color: "#14532D", marginTop: 2 }}>{cheapestUlam.recipe.name}</div>
                       </div>
-                    );
-                  }) : (
-                    <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)", padding: "var(--space-4)" }}>Loading best deals...</div>
+                      <div style={{ fontSize: "var(--text-xl)", fontWeight: 900, color: "#16A34A", flexShrink: 0 }}>₱{cheapestUlam.lucenaTotal.toFixed(2)}</div>
+                    </button>
+                  )}
+                  {bestValueUlam && (
+                    <button
+                      onClick={() => setActiveRecipe(bestValueUlam.recipe)}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "var(--space-3) var(--space-4)",
+                        background: activeRecipe?.id === bestValueUlam.recipe.id ? "#DBEAFE" : "#EFF6FF",
+                        border: activeRecipe?.id === bestValueUlam.recipe.id ? "2px solid #2563EB" : "1.5px solid #BFDBFE",
+                        borderRadius: "var(--radius-md)", cursor: "pointer", transition: "all 0.15s", textAlign: "left", width: "100%"
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: "10px", color: "#1D4ED8", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em" }}>🟡 Best Value</div>
+                        <div style={{ fontSize: "var(--text-md)", fontWeight: 800, color: "#1E3A8A", marginTop: 2 }}>{bestValueUlam.recipe.name}</div>
+                      </div>
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                        <div style={{ fontSize: "var(--text-md)", fontWeight: 900, color: "#2563EB" }}>₱{bestValueUlam.lucenaTotal.toFixed(2)}</div>
+                        <div style={{ fontSize: "11px", color: "#2563EB", fontWeight: 700 }}>Saves ₱{bestValueUlam.savings.toFixed(2)}</div>
+                      </div>
+                    </button>
                   )}
                 </div>
               </div>
 
-            </div>
-
-
-            {/* Section 2: Smart Ulam Calculator */}
-            <div className="card" style={{ border: "1px solid var(--color-primary)" }}>
-              <div className="card-header" style={{ background: "var(--color-primary-pale)", borderBottom: "1px solid #FDE047", padding: "var(--space-4) var(--space-5)" }}>
-                <h3 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "var(--color-accent)", margin: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" }}><ChefHat size={18} /> Smart Ulam Calculator</h3>
-                <div style={{ fontSize: "var(--text-xs)", color: "var(--color-accent)", opacity: 0.8, marginTop: 2 }}>Select a dish to see cooking cost using today's prices</div>
-              </div>
-              <div className="card-body" style={{ padding: "var(--space-5)" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "var(--space-2)", marginBottom: "var(--space-6)" }}>
-                  {RECIPES.map(recipe => {
-                    const bgImg = (() => {
-                      if (recipe.id.includes('sinigang')) return '/images/recipes/sinigang.jpg';
-                      if (recipe.id.includes('adobo')) return '/images/recipes/adobo.jpg';
-                      if (recipe.id.includes('tinola')) return '/images/recipes/tinola.jpg';
-                      if (recipe.id.includes('paksiw')) return '/images/recipes/paksiw.jpg';
-                      if (recipe.id.includes('pinakbet')) return '/images/recipes/pinakbet.jpg';
-                      if (recipe.id.includes('menudo')) return '/images/recipes/menudo.jpg';
-                      return '/images/recipes/sinigang.jpg';
-                    })();
-                    return (
-                      <button
-                        key={recipe.id}
-                        onClick={() => setActiveRecipe(recipe)}
-                        style={{
-                          position: "relative",
-                          height: "90px",
-                          borderRadius: "var(--radius-md)",
-                          border: activeRecipe?.id === recipe.id ? "3px solid var(--color-primary)" : "1px solid #E2E8F0",
-                          cursor: "pointer",
-                          overflow: "hidden",
-                          transition: "transform 0.2s, box-shadow 0.2s",
-                          boxShadow: activeRecipe?.id === recipe.id ? "0 4px 12px rgba(234,179,8,0.4)" : "none",
-                          transform: activeRecipe?.id === recipe.id ? "scale(1.02)" : "scale(1)"
-                        }}
-                      >
-                        <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${bgImg})`, backgroundSize: "cover", backgroundPosition: "center" }} />
-                        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.1))" }} />
-                        <div style={{ position: "relative", height: "100%", padding: "8px", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-                          <span style={{ fontSize: "13px", fontWeight: 800, color: "white", textAlign: "center", lineHeight: 1.2, textShadow: "0 2px 4px rgba(0,0,0,0.8)", letterSpacing: "0.5px" }}>{recipe.name}</span>
-                        </div>
-                      </button>
-                    )
-                  })}
+              {/* Budget Matcher */}
+              <div style={{ borderTop: "1px solid #E5E7EB", paddingTop: "var(--space-5)", flex: 1 }}>
+                <div style={{ fontSize: "11px", fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "var(--space-3)", display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+                  <Calculator size={13} /> Budget Matcher
                 </div>
-
-                {activeRecipe && (
-                  <div style={{ background: "#F8FAFC", padding: "var(--space-5)", borderRadius: "var(--radius-md)", border: "1px solid #E2E8F0" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #E2E8F0", paddingBottom: "var(--space-3)", marginBottom: "var(--space-3)" }}>
-                      <h4 style={{ margin: 0, fontSize: "var(--text-md)", fontWeight: 800, color: "var(--text-primary)" }}>{activeRecipe.name}</h4>
-                      <div style={{ fontSize: "var(--text-xl)", fontWeight: 900, color: "var(--color-primary)" }}>₱{activeRecipeCost.lucenaTotal.toFixed(2)}</div>
+                <div style={{ display: "flex", gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
+                  <div style={{ display: "flex", alignItems: "center", background: "#F3F4F6", borderRadius: "var(--radius-md)", padding: "0 var(--space-3)", flex: 1 }}>
+                    <span style={{ fontWeight: 800, color: "var(--text-muted)", marginRight: 8 }}>₱</span>
+                    <input
+                      type="number"
+                      value={budget}
+                      onChange={e => setBudget(e.target.value)}
+                      placeholder="Enter your budget..."
+                      style={{ border: "none", background: "transparent", outline: "none", width: "100%", padding: "10px 0", fontWeight: 700, fontSize: "16px" }}
+                    />
+                  </div>
+                  <button className="btn btn-primary" onClick={calculateBudget} style={{ whiteSpace: "nowrap" }}>Plan</button>
+                </div>
+                {budgetResult && (
+                  <div style={{ background: "#F8FAFC", padding: "var(--space-4)", borderRadius: "var(--radius-md)", border: "1px solid #E2E8F0" }}>
+                    <div style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: 600, lineHeight: 1.5, marginBottom: budgetResult.affordable?.length > 0 ? "var(--space-3)" : 0 }}>
+                      {budgetResult.message}
                     </div>
-
-                    <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", marginBottom: "var(--space-4)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span>Regional Average Cost:</span>
-                        <span style={{ fontWeight: 600 }}>₱{activeRecipeCost.compareTotal.toFixed(2)}</span>
+                    {budgetResult.affordable?.length > 0 && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {budgetResult.affordable.map((a: any, i: number) => (
+                          <button
+                            key={i}
+                            onClick={() => setActiveRecipe(a.recipe)}
+                            style={{
+                              display: "flex", justifyContent: "space-between", alignItems: "center",
+                              background: activeRecipe?.id === a.recipe.id ? "#EFF6FF" : "white",
+                              padding: "8px 12px", borderRadius: "6px",
+                              border: activeRecipe?.id === a.recipe.id ? "2px solid #2563EB" : "1px solid #E5E7EB",
+                              cursor: "pointer", transition: "all 0.15s", textAlign: "left", width: "100%"
+                            }}
+                          >
+                            <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-secondary)" }}>{a.recipe.name}</span>
+                            <span style={{ fontSize: "14px", fontWeight: 800, color: "var(--text-primary)" }}>₱{a.cost.toFixed(2)}</span>
+                          </button>
+                        ))}
+                        <div style={{ paddingTop: 8, borderTop: "1px dashed #CBD5E1", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: "13px", color: "var(--text-muted)", fontWeight: 600 }}>Estimated Change</span>
+                          <span style={{ fontSize: "16px", color: "#16A34A", fontWeight: 800 }}>₱{budgetResult.remaining.toFixed(2)}</span>
+                        </div>
                       </div>
-                      {activeRecipeCost.savings > 0 ? (
-                        <div style={{ color: "#166534", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
-                          <CheckCircle size={14} /> You save ₱{activeRecipeCost.savings.toFixed(2)} in Lucena
-                        </div>
-                      ) : activeRecipeCost.savings < 0 ? (
-                        <div style={{ color: "#DC2626", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
-                          <AlertCircle size={14} /> ₱{Math.abs(activeRecipeCost.savings).toFixed(2)} more expensive
-                        </div>
-                      ) : (
-                        <div style={{ color: "var(--text-muted)", fontWeight: 700 }}>Matches regional average</div>
-                      )}
-                    </div>
-
-                    <div>
-                      <div style={{ fontSize: "11px", textTransform: "uppercase", fontWeight: 800, color: "var(--text-muted)", marginBottom: 8 }}>Ingredient Breakdown</div>
-                      {activeRecipeCost.breakdown.map((ing, i) => (
-                        <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", padding: "4px 0", borderBottom: "1px dashed #E2E8F0" }}>
-                          <span style={{ color: "var(--text-primary)" }}>{ing.quantity} {ing.unit} {ing.commodityName}</span>
-                          <span style={{ fontWeight: 600, color: "var(--text-secondary)" }}>₱{ing.lucenaPrice.toFixed(2)}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <button
-                      style={{ marginTop: "var(--space-4)", width: "100%", padding: "10px", background: "var(--color-primary)", color: "var(--color-accent)", border: "none", borderRadius: "6px", fontWeight: 800, fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
-                      onClick={() => {
-                        // For recipes, just find the first ingredient's stall and use its closest entrance
-                        let currentPos: { x: number, y: number } | null = null;
-
-                        // First, find the first available stall for our ingredients to determine where to start
-                        for (const ing of activeRecipeCost.breakdown) {
-                          const matches = mapStalls.filter(s => s.category.toLowerCase().includes(ing.commodityName.toLowerCase()));
-                          if (matches.length > 0) {
-                            const canvasCoords = toCanvasCoords(matches[0]);
-                            const entrance = getClosestEntrance(canvasCoords.x, canvasCoords.y);
-                            currentPos = { x: entrance.x, y: entrance.y };
-                            break;
-                          }
-                        }
-
-                        if (!currentPos) return; // No ingredients found at all
-
-                        let dist = 0;
-                        const entranceLabel = LANDMARKS.find(l => {
-                          const c = toCanvasCoords(l);
-                          return c.x === currentPos!.x && c.y === currentPos!.y;
-                        })?.label || "Entrance";
-
-                        const ENTRANCE = { x: currentPos.x, y: currentPos.y, label: entranceLabel };
-                        const routePoints = [ENTRANCE];
-                        const highlighted: string[] = [];
-
-                        activeRecipeCost.breakdown.forEach(ing => {
-                          const query = ing.commodityName.toLowerCase();
-                          const matches = mapStalls.filter(s => s.category.toLowerCase().includes(query));
-                          if (matches.length > 0) {
-                            const nearest = matches.reduce((prev, curr) => {
-                              const prevC = toCanvasCoords(prev);
-                              const currC = toCanvasCoords(curr);
-                              const dPrev = Math.sqrt(Math.pow(prevC.x - currentPos!.x, 2) + Math.pow(prevC.y - currentPos!.y, 2));
-                              const dCurr = Math.sqrt(Math.pow(currC.x - currentPos!.x, 2) + Math.pow(currC.y - currentPos!.y, 2));
-                              return dCurr < dPrev ? curr : prev;
-                            });
-
-                            const nearestCanvas = toCanvasCoords(nearest);
-                            dist += Math.floor(Math.sqrt(Math.pow(nearestCanvas.x - currentPos!.x, 2) + Math.pow(nearestCanvas.y - currentPos!.y, 2)) / 50);
-                            routePoints.push({ x: nearestCanvas.x, y: nearestCanvas.y, label: `${ing.commodityName} (Stall ${nearest.number})` });
-                            highlighted.push(nearest.id);
-                            currentPos = nearestCanvas;
-                          }
-                        });
-
-                        setNavigationRoute({ points: routePoints, totalDistanceMeters: dist });
-                        setHighlightedMapStallIds(highlighted);
-                        setMapSearch("");
-                        setSelectedMapStallId(null);
-                        document.getElementById('market-navigator')?.scrollIntoView({ behavior: 'smooth' });
-                      }}
-                    >
-                      <MapPin size={16} /> Find Ingredients in Market
-                    </button>
+                    )}
                   </div>
                 )}
               </div>
             </div>
 
-          </div>
+            {/* ── RIGHT: Recipe Selection + Live Breakdown ── */}
+            <div style={{ padding: "var(--space-5)", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
 
-          {/* Right Column */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-8)" }}>
-
-            {/* Section 7: Historical Price Intelligence */}
-            <div className="card" style={{ display: "flex", flexDirection: "column" }}>
-              <div className="card-header" style={{ padding: "var(--space-5)", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <h3 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "var(--color-accent)", margin: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" }}><BarChart2 size={18} /> Historical Price Intelligence</h3>
-                  <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)", marginTop: 2 }}>Interactive explorer with forecasting</div>
-                </div>
-                <select className="form-select" style={{ width: 150, fontSize: "var(--text-sm)", fontWeight: 700 }} value={activeCommodity.id} onChange={(e) => setActiveCommodity(staples.find(s => s.id === e.target.value)!)}>
-                  {staples.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-              <div className="card-body" style={{ padding: "var(--space-5)", flex: 1, display: "flex", flexDirection: "column" }}>
-
-                {/* Chart Header Stats */}
-                <div style={{ display: "flex", gap: "var(--space-6)", marginBottom: "var(--space-6)" }}>
-                  <div>
-                    <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", fontWeight: 700, color: "var(--text-muted)" }}>Current Price</div>
-                    <div style={{ fontSize: "var(--text-2xl)", fontWeight: 900, color: "var(--text-primary)" }}>₱{activeCommodity.price}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", fontWeight: 700, color: "var(--text-muted)" }}>30-Day High</div>
-                    <div style={{ fontSize: "var(--text-2xl)", fontWeight: 900, color: "#DC2626" }}>₱{(activeCommodity as any).thirtyDayHigh ?? 95}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", fontWeight: 700, color: "var(--text-muted)" }}>30-Day Low</div>
-                    <div style={{ fontSize: "var(--text-2xl)", fontWeight: 900, color: "#16A34A" }}>₱{(activeCommodity as any).thirtyDayLow ?? 70}</div>
-                  </div>
-                </div>
-
-                {/* Interactive Area Chart */}
-                <div style={{ height: 250, width: "100%", marginBottom: "var(--space-4)" }}>
-                  {isMounted ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={(activeCommodity as any)?.historicalData || HISTORICAL_DATA} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.8} />
-                            <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#D1D5DB" />
-                        <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#4B5563", fontWeight: 600 }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 12, fill: "#4B5563", fontWeight: 600 }} axisLine={false} tickLine={false} />
-                        <RechartsTooltip contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }} />
-                        <Area type="monotone" dataKey="price" stroke="var(--color-accent)" strokeWidth={3} fillOpacity={1} fill="url(#colorPrice)" />
-                        {activeCommodity.id === 'tomato' && <ReferenceDot x="May 29" y={95} r={5} fill="#DC2626" stroke="white" strokeWidth={2} />}
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  ) : <div style={{ height: "100%", width: "100%" }} />}
-                </div>
-
-                {/* Annotations & WOW Forecast */}
-                <div style={{ background: "#F3F4F6", padding: "var(--space-4)", borderRadius: "var(--radius-md)", display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-                  {activeCommodity.id === 'tomato' && (
-                    <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", display: "flex", alignItems: "flex-start", gap: 8 }}>
-                      <Info size={16} color="#DC2626" style={{ marginTop: 2, flexShrink: 0 }} />
-                      <span><strong>Historical Insight:</strong> Price spike occurred on May 29 due to regional supply constraints.</span>
-                    </div>
-                  )}
-                  <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", display: "flex", alignItems: "flex-start", gap: 8 }}>
-                    <Activity size={16} color="#8B5CF6" style={{ marginTop: 2, flexShrink: 0 }} />
-                    <span>
-                      <strong style={{ color: "#8B5CF6" }}>Experimental Forecast:</strong> If current trend continues, {activeCommodity.name} may {activeCommodity.weeklyChange > 0 ? 'increase by 4–6%' : 'decrease by 2–3%'} next week.
-                    </span>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            {/* Section 8: Lucena vs Another Market (Insight Based) */}
-            <div className="card">
-              <div className="card-header" style={{ padding: "var(--space-4) var(--space-5)", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h3 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "var(--color-accent)", margin: 0 }}>Lucena vs</h3>
-                <select className="form-select" value={compareTarget} onChange={e => setCompareTarget(e.target.value)} style={{ width: 220, fontSize: "var(--text-sm)", fontWeight: 700 }}>
-                  {marketsData.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
-              </div>
-              <div className="card-body" style={{ padding: "var(--space-5)" }}>
-                <div style={{ fontSize: "var(--text-lg)", fontWeight: 500, color: "var(--text-primary)", lineHeight: 1.6 }}>
-                  {generateComparisonInsight()}
-                </div>
-              </div>
-            </div>
-
-            {/* WOW Feature: Today's Sulit Ulam & Budget Planner */}
-            <div className="card">
-              <div className="card-header" style={{ padding: "var(--space-4) var(--space-5)", borderBottom: "1px solid #E5E7EB" }}>
-                <h3 style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: "var(--color-accent)", margin: 0, display: "flex", alignItems: "center", gap: "var(--space-2)" }}><Utensils size={18} /> Today's Sulit Ulam</h3>
-              </div>
-              <div className="card-body" style={{ padding: "var(--space-5)" }}>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)", marginBottom: "var(--space-6)" }}>
-                  <div style={{ background: "#F0FDF4", padding: "12px", borderRadius: "8px", border: "1px solid #DCFCE7" }}>
-                    <div style={{ fontSize: "11px", color: "#166534", fontWeight: 800, textTransform: "uppercase", marginBottom: 4 }}>🟢 Cheapest Dish</div>
-                    <div style={{ fontSize: "16px", fontWeight: 800, color: "#14532D" }}>{cheapestUlam?.recipe.name}</div>
-                    <div style={{ fontSize: "14px", fontWeight: 700, color: "#16A34A", marginTop: 2 }}>₱{cheapestUlam?.lucenaTotal.toFixed(2)}</div>
-                  </div>
-                  <div style={{ background: "#EFF6FF", padding: "12px", borderRadius: "8px", border: "1px solid #BFDBFE" }}>
-                    <div style={{ fontSize: "11px", color: "#1D4ED8", fontWeight: 800, textTransform: "uppercase", marginBottom: 4 }}>🟡 Best Value</div>
-                    <div style={{ fontSize: "16px", fontWeight: 800, color: "#1E3A8A" }}>{bestValueUlam?.recipe.name}</div>
-                    <div style={{ fontSize: "14px", fontWeight: 700, color: "#2563EB", marginTop: 2 }}>Saves ₱{bestValueUlam?.savings.toFixed(2)}</div>
-                  </div>
-                  <div style={{ background: "#FEF2F2", padding: "12px", borderRadius: "8px", border: "1px solid #FECACA", gridColumn: "span 2" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <div style={{ fontSize: "11px", color: "#DC2626", fontWeight: 800, textTransform: "uppercase", marginBottom: 4 }}>🔴 Most Expensive</div>
-                        <div style={{ fontSize: "16px", fontWeight: 800, color: "#991B1B" }}>{expensiveUlam?.recipe.name}</div>
+              {/* Recipe Image Grid */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "var(--space-2)" }}>
+                {RECIPES.map(recipe => {
+                  const bgImg = (() => {
+                    if (recipe.id.includes('sinigang')) return '/images/recipes/sinigang.jpg';
+                    if (recipe.id.includes('adobo')) return '/images/recipes/adobo.jpg';
+                    if (recipe.id.includes('tinola')) return '/images/recipes/tinola.jpg';
+                    if (recipe.id.includes('paksiw')) return '/images/recipes/paksiw.jpg';
+                    if (recipe.id.includes('pinakbet')) return '/images/recipes/pinakbet.jpg';
+                    if (recipe.id.includes('menudo')) return '/images/recipes/menudo.jpg';
+                    return '/images/recipes/sinigang.jpg';
+                  })();
+                  return (
+                    <button
+                      key={recipe.id}
+                      onClick={() => setActiveRecipe(recipe)}
+                      style={{
+                        position: "relative", height: "80px",
+                        borderRadius: "var(--radius-md)",
+                        border: activeRecipe?.id === recipe.id ? "3px solid var(--color-primary)" : "1.5px solid #E2E8F0",
+                        cursor: "pointer", overflow: "hidden",
+                        transition: "transform 0.2s, box-shadow 0.2s",
+                        boxShadow: activeRecipe?.id === recipe.id ? "0 4px 12px rgba(234,179,8,0.4)" : "none",
+                        transform: activeRecipe?.id === recipe.id ? "scale(1.04)" : "scale(1)"
+                      }}
+                    >
+                      <div style={{ position: "absolute", inset: 0, backgroundImage: `url(${bgImg})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+                      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.1))" }} />
+                      <div style={{ position: "relative", height: "100%", padding: "8px", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+                        <span style={{ fontSize: "12px", fontWeight: 800, color: "white", textAlign: "center", lineHeight: 1.2, textShadow: "0 2px 4px rgba(0,0,0,0.8)" }}>{recipe.name}</span>
                       </div>
-                      <div style={{ fontSize: "20px", fontWeight: 800, color: "#DC2626" }}>₱{expensiveUlam?.lucenaTotal.toFixed(2)}</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Grocery Budget Planner (Enhanced) */}
-                <div style={{ borderTop: "1px solid #E5E7EB", paddingTop: "var(--space-5)" }}>
-                  <h4 style={{ fontSize: "14px", fontWeight: 800, color: "var(--text-primary)", margin: "0 0 12px 0", display: "flex", alignItems: "center", gap: "8px" }}><Calculator size={16} /> Budget Meal Planner</h4>
-                  <div style={{ display: "flex", gap: "var(--space-2)", marginBottom: "var(--space-4)" }}>
-                    <div style={{ display: "flex", alignItems: "center", background: "#F3F4F6", borderRadius: "var(--radius-md)", padding: "0 var(--space-3)", flex: 1 }}>
-                      <span style={{ fontWeight: 800, color: "var(--text-muted)", marginRight: 8 }}>₱</span>
-                      <input type="number" value={budget} onChange={e => setBudget(e.target.value)} style={{ border: "none", background: "transparent", outline: "none", width: "100%", padding: "10px 0", fontWeight: 700, fontSize: "16px" }} />
-                    </div>
-                    <button className="btn btn-primary" onClick={calculateBudget}>Plan</button>
-                  </div>
-                  {budgetResult && (
-                    <div style={{ background: "#F8FAFC", padding: "var(--space-4)", borderRadius: "var(--radius-md)", border: "1px solid #E2E8F0" }}>
-                      <div style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: 600, marginBottom: "12px", lineHeight: 1.5 }}>
-                        {budgetResult.message}
-                      </div>
-                      {budgetResult.affordable && budgetResult.affordable.length > 0 && (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                          {budgetResult.affordable.map((a: any, i: number) => (
-                            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "white", padding: "8px 12px", borderRadius: "6px", border: "1px solid #E5E7EB" }}>
-                              <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-secondary)" }}>{a.recipe.image} {a.recipe.name}</span>
-                              <span style={{ fontSize: "14px", fontWeight: 800, color: "var(--text-primary)" }}>₱{a.cost.toFixed(2)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {budgetResult.affordable && budgetResult.affordable.length > 0 && (
-                        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed #CBD5E1", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontSize: "13px", color: "var(--text-muted)", fontWeight: 600 }}>Estimated Change</span>
-                          <span style={{ fontSize: "16px", color: "#16A34A", fontWeight: 800 }}>₱{budgetResult.remaining.toFixed(2)}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
+                    </button>
+                  );
+                })}
               </div>
-            </div>
 
+              {/* Live Breakdown or Placeholder */}
+              {activeRecipe ? (
+                <div style={{ background: "#F8FAFC", padding: "var(--space-5)", borderRadius: "var(--radius-md)", border: "1px solid #E2E8F0", flex: 1 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #E2E8F0", paddingBottom: "var(--space-3)", marginBottom: "var(--space-3)" }}>
+                    <h4 style={{ margin: 0, fontSize: "var(--text-md)", fontWeight: 800, color: "var(--text-primary)" }}>{activeRecipe.name}</h4>
+                    <div style={{ fontSize: "var(--text-xl)", fontWeight: 900, color: "var(--color-primary)" }}>₱{activeRecipeCost.lucenaTotal.toFixed(2)}</div>
+                  </div>
+                  <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", marginBottom: "var(--space-3)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                      <span>Regional Average Cost:</span>
+                      <span style={{ fontWeight: 600 }}>₱{activeRecipeCost.compareTotal.toFixed(2)}</span>
+                    </div>
+                    {activeRecipeCost.savings > 0 ? (
+                      <div style={{ color: "#166534", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+                        <CheckCircle size={14} /> You save ₱{activeRecipeCost.savings.toFixed(2)} in Lucena
+                      </div>
+                    ) : activeRecipeCost.savings < 0 ? (
+                      <div style={{ color: "#DC2626", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+                        <AlertCircle size={14} /> ₱{Math.abs(activeRecipeCost.savings).toFixed(2)} more expensive
+                      </div>
+                    ) : (
+                      <div style={{ color: "var(--text-muted)", fontWeight: 700 }}>Matches regional average</div>
+                    )}
+                  </div>
+                  <div style={{ marginBottom: "var(--space-4)" }}>
+                    <div style={{ fontSize: "11px", textTransform: "uppercase", fontWeight: 800, color: "var(--text-muted)", marginBottom: 8 }}>Ingredient Breakdown</div>
+                    {activeRecipeCost.breakdown.map((ing, i) => (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", padding: "4px 0", borderBottom: "1px dashed #E2E8F0" }}>
+                        <span style={{ color: "var(--text-primary)" }}>{ing.quantity} {ing.unit} {ing.commodityName}</span>
+                        <span style={{ fontWeight: 600, color: "var(--text-secondary)" }}>₱{ing.lucenaPrice.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => handleFindInMarket()}
+                    style={{ width: "100%", padding: "10px", background: "var(--color-primary)", color: "var(--color-accent)", border: "none", borderRadius: "6px", fontWeight: 800, fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                  >
+                    <MapPin size={16} /> Find Ingredients in Market
+                  </button>
+                </div>
+              ) : (
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#F8FAFC", borderRadius: "var(--radius-md)", border: "1.5px dashed #E2E8F0", padding: "var(--space-8)", textAlign: "center", minHeight: 160 }}>
+                  <ChefHat size={40} color="#D1D5DB" style={{ marginBottom: "var(--space-3)" }} />
+                  <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", fontWeight: 700 }}>Select a dish above or tap a Sulit Pick</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 4 }}>Your ingredient breakdown and market route will appear here</div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Section 6: What Changed This Week? (Moved to bottom to replace Commodity Movers) */}
-        <div>
-          <h2 style={{ fontSize: "var(--text-2xl)", fontWeight: 800, color: "var(--color-accent)", margin: "0 0 var(--space-4) 0", display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-            <Activity size={24} color="var(--color-primary)" /> What Changed This Week?
-          </h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "var(--space-4)" }}>
-            {(() => {
-              if (!staples.length) return null;
-              const increases = staples.filter(s => s.weeklyChange > 0).sort((a, b) => b.weeklyChange - a.weeklyChange);
-              const decreases = staples.filter(s => s.weeklyChange < 0).sort((a, b) => a.weeklyChange - b.weeklyChange);
-
-              const biggestIncrease = increases.length > 0 ? increases[0] : null;
-              const biggestDecrease = decreases.length > 0 ? decreases[0] : null;
-
-              const sortedByVolatility = [...staples].filter(s => Math.abs(s.weeklyChange) > 0).sort((a, b) => Math.abs(b.weeklyChange) - Math.abs(a.weeklyChange));
-              const mostVolatile = sortedByVolatility.length > 0 ? sortedByVolatility[0] : null;
-
-              const sortedByStability = [...staples].sort((a, b) => Math.abs(a.weeklyChange) - Math.abs(b.weeklyChange));
-              const mostStable = sortedByStability[0];
-
-              const formatName = (item: any) => {
-                if (!item || !item.name) return '';
-                if (!item.category) return item.name;
-
-                const catLower = item.category.toLowerCase();
-                if (catLower.includes('imported commercial rice')) return `${item.name} (Imported Rice)`;
-                if (catLower.includes('local commercial rice')) return `${item.name} (Local Rice)`;
-                return item.name;
-              };
-
-              return (
-                <>
-                  <div style={{ padding: "var(--space-4)", background: "white", borderRadius: "var(--radius-md)", border: "1px solid #E5E7EB", display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#FEE2E2", color: "#DC2626", display: "flex", alignItems: "center", justifyContent: "center" }}><TrendingUp size={20} /></div>
-                    <div>
-                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase" }}>Biggest Increase</div>
-                      <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>{biggestIncrease ? `${formatName(biggestIncrease)} (+${biggestIncrease.weeklyChange}%)` : 'No increases'}</div>
-                    </div>
-                  </div>
-                  <div style={{ padding: "var(--space-4)", background: "white", borderRadius: "var(--radius-md)", border: "1px solid #E5E7EB", display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#DCFCE7", color: "#16A34A", display: "flex", alignItems: "center", justifyContent: "center" }}><TrendingDown size={20} /></div>
-                    <div>
-                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase" }}>Biggest Decrease</div>
-                      <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>{biggestDecrease ? `${formatName(biggestDecrease)} (${biggestDecrease.weeklyChange}%)` : 'No decreases'}</div>
-                    </div>
-                  </div>
-                  <div style={{ padding: "var(--space-4)", background: "white", borderRadius: "var(--radius-md)", border: "1px solid #E5E7EB", display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#F3F4F6", color: "#4B5563", display: "flex", alignItems: "center", justifyContent: "center" }}><Minus size={20} /></div>
-                    <div>
-                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase" }}>Most Stable</div>
-                      <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>{mostStable.weeklyChange === 0 ? `${formatName(mostStable)} (Unchanged)` : formatName(mostStable)}</div>
-                    </div>
-                  </div>
-                  <div style={{ padding: "var(--space-4)", background: "white", borderRadius: "var(--radius-md)", border: "1px solid #E5E7EB", display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#FEF3C7", color: "#D97706", display: "flex", alignItems: "center", justifyContent: "center" }}><Activity size={20} /></div>
-                    <div>
-                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase" }}>High Volatility</div>
-                      <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>{mostVolatile ? formatName(mostVolatile) : 'Stable Market'}</div>
-                    </div>
-                  </div>
-                </>
-              )
-            })()}
-          </div>
-        </div>
 
       </main>
 
@@ -1625,24 +1587,49 @@ export default function LucenaDecisionSupport() {
                       value={complaintForm.stall} onChange={e => setComplaintForm({ ...complaintForm, stall: e.target.value })} />
                     <datalist id="stalls-list">
                       {stallsList.map(s => (
-                        <option key={s.id} value={s.stall_number}>{s.vendor_name ? 'Registered Vendor' : 'Vacant'}</option>
+                        <option key={s.id} value={s.stall_number}>{s.vendor_name && s.vendor_name !== "—" ? blurName(s.vendor_name as string) : 'Vacant'}</option>
                       ))}
                     </datalist>
                   </div>
 
                   <div>
-                    <label style={{ display: "block", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "6px" }}>Issue Category</label>
-                    <select className="form-select" style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #D1D5DB", appearance: "auto" }}
-                      value={complaintForm.category} onChange={e => setComplaintForm({ ...complaintForm, category: e.target.value })}>
-                      <option value="sanitation">Sanitation</option>
-                      <option value="overpricing">Overpricing</option>
-                      <option value="safety">Safety Hazard</option>
-                      <option value="food_safety">Food Safety</option>
-                      <option value="permit">Permit Violation</option>
-                      <option value="display">Display Violation</option>
-                      <option value="noise">Noise/Disturbance</option>
-                      <option value="other">Other</option>
-                    </select>
+                    <label style={{ display: "block", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "8px" }}>
+                      Issue Category <span style={{ color: "#DC2626" }}>*</span>
+                    </label>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                      {([
+                        { value: "sanitation",  emoji: "🧹", label: "Sanitation",        desc: "Cleanliness issues" },
+                        { value: "overpricing", emoji: "💰", label: "Overpricing",       desc: "Unfair pricing" },
+                        { value: "safety",      emoji: "⚠️", label: "Safety Hazard",     desc: "Physical danger" },
+                        { value: "food_safety", emoji: "🥗", label: "Food Safety",       desc: "Spoiled or unsafe food" },
+                        { value: "permit",      emoji: "📋", label: "Permit Violation",  desc: "Missing permits" },
+                        { value: "display",     emoji: "🏷️", label: "Display Violation", desc: "Wrong labeling" },
+                        { value: "noise",       emoji: "🔊", label: "Noise/Disturbance", desc: "Loud or disruptive" },
+                        { value: "other",       emoji: "❓", label: "Other",             desc: "Something else" },
+                      ] as const).map(opt => {
+                        const isSelected = complaintForm.category === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setComplaintForm({ ...complaintForm, category: opt.value })}
+                            style={{
+                              textAlign: "left", padding: "10px 12px", borderRadius: "8px", cursor: "pointer",
+                              border: isSelected ? "2px solid #DC2626" : "1.5px solid #E5E7EB",
+                              background: isSelected ? "#FEF2F2" : "white",
+                              transition: "all 0.15s",
+                              display: "flex", alignItems: "center", gap: "8px",
+                            }}
+                          >
+                            <span style={{ fontSize: "20px", lineHeight: 1 }}>{opt.emoji}</span>
+                            <div>
+                              <div style={{ fontSize: "13px", fontWeight: 700, color: isSelected ? "#DC2626" : "var(--text-primary)", lineHeight: 1.2 }}>{opt.label}</div>
+                              <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>{opt.desc}</div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   <div>

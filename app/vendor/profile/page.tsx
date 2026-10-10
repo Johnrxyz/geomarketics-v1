@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import AppShell from "@/components/layout/AppShell";
-import { CheckCircle, User, Phone, Mail, Store, Edit3, Save } from "lucide-react";
+import { CheckCircle, User, Phone, Mail, Store, Edit3, Save, MapPin, Tag, Calendar, ShieldCheck } from "lucide-react";
 import { vendorsApi, getUser } from "@/lib/api";
 
 interface Profile {
@@ -49,7 +49,6 @@ export default function VendorProfilePage() {
     vendorsApi.list()
       .then((data: any) => {
         const results = data?.results ?? data ?? [];
-        // Try to match by user id or username/email
         let match: any = null;
         if (user) {
           match = results.find((v: any) =>
@@ -59,7 +58,6 @@ export default function VendorProfilePage() {
             (user.username && v.username?.toLowerCase() === user.username.toLowerCase())
           );
         }
-        // Fall back to first result if no match
         if (!match && results.length > 0) match = results[0];
 
         if (match) {
@@ -88,7 +86,7 @@ export default function VendorProfilePage() {
       })
       .catch((err: any) => {
         setError(err?.detail ?? err?.message ?? "Failed to load profile.");
-        // Still populate name/email from localStorage user
+        const user = getUser();
         if (user) {
           setProfile((p) => ({
             ...p,
@@ -102,7 +100,6 @@ export default function VendorProfilePage() {
 
   const handleSave = async () => {
     if (!profile.id) {
-      // No vendor id — just show saved locally
       setSaved(true);
       setEditMode(false);
       setTimeout(() => setSaved(false), 3000);
@@ -125,8 +122,16 @@ export default function VendorProfilePage() {
     }
   };
 
+  const stallStats = [
+    { icon: <Store size={14} />,    label: "Stall",    value: profile.stall },
+    { icon: <MapPin size={14} />,   label: "Section",  value: profile.section },
+    { icon: <Tag size={14} />,      label: "Category", value: profile.category },
+    { icon: <Calendar size={14} />, label: "Since",    value: profile.since },
+  ];
+
   return (
     <AppShell pageTitle="Vendor Profile" role="vendor" userName={profile.name || "Vendor"} userRole="Vendor">
+      {/* ── Page header ───────────────────────────────────────────── */}
       <div className="page-header">
         <div className="page-header-left">
           <h2 className="page-title">My Profile</h2>
@@ -155,96 +160,109 @@ export default function VendorProfilePage() {
       </div>
 
       {error && (
-        <div style={{ marginBottom: "var(--space-4)", padding: "var(--space-3) var(--space-4)", background: "#FEE2E2", borderRadius: "var(--radius-md)", color: "var(--color-error)", fontSize: "var(--text-sm)" }}>
+        <div style={{ marginBottom: "var(--space-3)", padding: "var(--space-2) var(--space-4)", background: "#FEE2E2", borderRadius: "var(--radius-md)", color: "var(--color-error)", fontSize: "var(--text-sm)" }}>
           {error}
         </div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)", maxWidth: 640 }}>
+      {/* ── Two-column layout ─────────────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)", alignItems: "start" }}>
 
-        {/* Profile Card */}
+        {/* LEFT — Personal Info card */}
         <div className="card">
-          <div className="card-header">
-            <div className="card-title">Personal Information</div>
-            <User size={18} style={{ color: "var(--text-muted)" }} />
-          </div>
-          <div className="card-body">
-            {/* Avatar */}
+          {/* Compact identity strip */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: "var(--space-3)",
+            padding: "var(--space-3) var(--space-4)",
+            background: "linear-gradient(135deg,#EFF6FF,#DBEAFE)",
+            borderBottom: "1px solid var(--border-color)",
+          }}>
             <div style={{
-              display: "flex", alignItems: "center", gap: "var(--space-4)",
-              padding: "var(--space-4)", background: "linear-gradient(135deg,#EFF6FF,#DBEAFE)",
-              borderRadius: "var(--radius-md)", marginBottom: "var(--space-5)"
-            }}>
-              <div style={{
-                width: 64, height: 64, borderRadius: "50%",
-                background: "var(--color-accent)", color: "white",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "var(--text-2xl)", fontWeight: 800, flexShrink: 0
-              }} aria-hidden="true">{loading ? "…" : getInitials(profile.name)}</div>
-              <div>
-                <div style={{ fontSize: "var(--text-xl)", fontWeight: 700 }}>{loading ? "Loading..." : profile.name || "—"}</div>
-                <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>Vendor since {profile.since}</div>
-                <span className="badge badge-success badge-dot" style={{ marginTop: "var(--space-1)" }}>Active Vendor</span>
+              width: 48, height: 48, borderRadius: "50%", flexShrink: 0,
+              background: "var(--color-accent)", color: "white",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "var(--text-lg)", fontWeight: 800,
+            }} aria-hidden="true">
+              {loading ? "…" : getInitials(profile.name)}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: "var(--text-base)", fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {loading ? "Loading..." : profile.name || "—"}
+              </div>
+              <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>Since {profile.since}</div>
+              <span className="badge badge-success badge-dot" style={{ marginTop: 2 }}>Active</span>
+            </div>
+            <ShieldCheck size={20} color="#16A34A" style={{ marginLeft: "auto", flexShrink: 0, opacity: 0.7 }} />
+          </div>
+
+          {/* Form fields — compact */}
+          <div style={{ padding: "var(--space-3) var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" htmlFor="v-name" style={{ marginBottom: 4 }}>Full Name</label>
+              <div className="form-input-wrapper">
+                <User size={14} className="form-input-icon" />
+                <input id="v-name" className="form-input has-icon-left"
+                  value={profile.name} readOnly={!editMode}
+                  onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))}
+                />
               </div>
             </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
-              <div className="form-group">
-                <label className="form-label" htmlFor="v-name">Full Name</label>
-                <div className="form-input-wrapper">
-                  <User size={15} className="form-input-icon" />
-                  <input id="v-name" className="form-input has-icon-left"
-                    value={profile.name}
-                    readOnly={!editMode}
-                    onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))}
-                  />
-                </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" htmlFor="v-contact" style={{ marginBottom: 4 }}>Contact Number</label>
+              <div className="form-input-wrapper">
+                <Phone size={14} className="form-input-icon" />
+                <input id="v-contact" className="form-input has-icon-left"
+                  value={profile.contact} readOnly={!editMode}
+                  onChange={(e) => setProfile((p) => ({ ...p, contact: e.target.value }))}
+                />
               </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="v-contact">Contact Number</label>
-                <div className="form-input-wrapper">
-                  <Phone size={15} className="form-input-icon" />
-                  <input id="v-contact" className="form-input has-icon-left"
-                    value={profile.contact}
-                    readOnly={!editMode}
-                    onChange={(e) => setProfile((p) => ({ ...p, contact: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor="v-email">Email Address</label>
-                <div className="form-input-wrapper">
-                  <Mail size={15} className="form-input-icon" />
-                  <input id="v-email" type="email" className="form-input has-icon-left"
-                    value={profile.email}
-                    readOnly={!editMode}
-                    onChange={(e) => setProfile((p) => ({ ...p, email: e.target.value }))}
-                  />
-                </div>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" htmlFor="v-email" style={{ marginBottom: 4 }}>Email Address</label>
+              <div className="form-input-wrapper">
+                <Mail size={14} className="form-input-icon" />
+                <input id="v-email" type="email" className="form-input has-icon-left"
+                  value={profile.email} readOnly={!editMode}
+                  onChange={(e) => setProfile((p) => ({ ...p, email: e.target.value }))}
+                />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Stall Info */}
+        {/* RIGHT — Stall info card */}
         <div className="card">
-          <div className="card-header">
-            <div className="card-title">Stall Information</div>
-            <Store size={18} style={{ color: "var(--text-muted)" }} />
+          <div className="card-header" style={{ padding: "var(--space-3) var(--space-4)" }}>
+            <div className="card-title" style={{ fontSize: "var(--text-sm)" }}>Stall Information</div>
+            <Store size={16} style={{ color: "var(--text-muted)" }} />
           </div>
-          <div className="card-body">
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
-              {[
-                { label: "Stall Number", value: profile.stall },
-                { label: "Section",      value: profile.section },
-                { label: "Category",     value: profile.category },
-                { label: "Vendor Since", value: profile.since },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <div style={{ fontSize: "var(--text-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", marginBottom: 2 }}>{label}</div>
-                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>{loading ? "…" : value}</div>
-                </div>
-              ))}
+          <div style={{ padding: "var(--space-3) var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+            {stallStats.map(({ icon, label, value }) => (
+              <div key={label} style={{
+                display: "flex", alignItems: "center", gap: "var(--space-3)",
+                padding: "var(--space-2) var(--space-3)",
+                background: "#F8FAFC", borderRadius: "var(--radius-sm)",
+                border: "1px solid var(--border-color)",
+              }}>
+                <span style={{ color: "var(--color-primary)", display: "flex", flexShrink: 0 }}>{icon}</span>
+                <span style={{ fontSize: "var(--text-xs)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-muted)", width: 64, flexShrink: 0 }}>{label}</span>
+                <span style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "var(--text-primary)" }}>{loading ? "…" : value}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Quick status summary */}
+          <div style={{
+            margin: "0 var(--space-4) var(--space-3)",
+            padding: "var(--space-3)",
+            background: "linear-gradient(135deg, #DCFCE7, #BBF7D0)",
+            borderRadius: "var(--radius-md)",
+            display: "flex", alignItems: "center", gap: "var(--space-2)",
+          }}>
+            <CheckCircle size={16} color="#16A34A" />
+            <div>
+              <div style={{ fontSize: "var(--text-xs)", fontWeight: 800, color: "#166534", textTransform: "uppercase", letterSpacing: "0.05em" }}>Status</div>
+              <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "#15803D" }}>Active & Compliant</div>
             </div>
           </div>
         </div>

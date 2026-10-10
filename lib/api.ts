@@ -1,4 +1,8 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+let BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  BASE_URL = `http://${window.location.hostname}:8000/api/v1`;
+}
 
 // ─── Token helpers ────────────────────────────────────────────────────────────
 
@@ -158,6 +162,11 @@ export const vendorsApi = {
     return json(res);
   },
 
+  async create(data: Record<string, unknown>) {
+    const res = await apiFetch(`/vendors/`, { method: 'POST', body: JSON.stringify(data) });
+    return json(res);
+  },
+
   async complianceHistory(id: number | string) {
     const res = await apiFetch(`/vendors/${id}/compliance-history/`);
     return json(res);
@@ -181,6 +190,11 @@ export const stallsApi = {
   async update(id: number | string, data: Record<string, unknown>) {
     const res = await apiFetch(`/stalls/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, !!getToken());
     return json(res);
+  },
+
+  async alertSummary() {
+    const res = await apiFetch('/stalls/alert-summary/');
+    return json<any[]>(res);
   },
 };
 
@@ -251,6 +265,14 @@ export const complaintsApi = {
   async escalate(id: number | string) {
     const res = await apiFetch(`/complaints/${id}/escalate/`, {
       method: 'POST',
+    });
+    return json(res);
+  },
+
+  async flagSpam(id: number | string, isFlagged: boolean, reason?: string) {
+    const res = await apiFetch(`/complaints/${id}/flag-spam/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_flagged_spam: isFlagged, spam_reason: reason ?? '' }),
     });
     return json(res);
   },
@@ -558,4 +580,12 @@ export const announcementsApi = {
     const res = await apiFetch(`/announcements/${id}/`, { method: 'DELETE' });
     return res.ok;
   }
+};
+
+// ─── Users API ────────────────────────────────────────────────────────────────
+export const usersApi = {
+  async updateMe(data: Record<string, unknown>) {
+    const res = await apiFetch('/auth/me/', { method: 'PATCH', body: JSON.stringify(data) });
+    return json(res);
+  },
 };
