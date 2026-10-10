@@ -80,7 +80,7 @@ export default function AdminVendorProfilePage({ params }: { params: Promise<{ i
         Promise.all([
           violationsApi.list({ vendor: id.toString() }),
           complaintsApi.list({ vendor: id.toString() })
-        ]).then(([vData, cData]) => {
+        ]).then(([vData, cData]: [any, any]) => {
           setVendorViolations(vData?.results ?? vData ?? []);
           setVendorComplaints(cData?.results ?? cData ?? []);
         }).catch(err => {
