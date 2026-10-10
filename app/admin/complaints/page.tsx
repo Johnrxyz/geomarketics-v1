@@ -59,7 +59,7 @@ function formatDate(dateStr: string): string {
   }
 }
 
-export default function ComplaintsPage() {
+function ComplaintsContent() {
   const { ready, user } = useAuthGuard("admin");
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -704,5 +704,13 @@ export default function ComplaintsPage() {
         </div>
       </Modal>
     </AppShell>
+  );
+}
+
+export default function ComplaintsPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ComplaintsContent />
+    </Suspense>
   );
 }

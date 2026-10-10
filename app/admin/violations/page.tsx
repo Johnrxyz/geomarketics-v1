@@ -8,7 +8,7 @@ import { Plus, Printer } from "lucide-react";
 import { violationsApi, vendorsApi } from "@/lib/api";
 import { useAuthGuard } from "@/lib/useAuthGuard";
 
-export default function ViolationsPage() {
+function ViolationsContent() {
   const { ready, user } = useAuthGuard("admin");
   const [violations, setViolations] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
@@ -282,5 +282,13 @@ export default function ViolationsPage() {
         </div>
       )}
     </AppShell>
+  );
+}
+
+export default function ViolationsPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ViolationsContent />
+    </Suspense>
   );
 }
