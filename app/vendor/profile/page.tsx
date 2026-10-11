@@ -165,8 +165,8 @@ export default function VendorProfilePage() {
         </div>
       )}
 
-      {/* ── Two-column layout ─────────────────────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)", alignItems: "start" }}>
+      {/* ── Responsive Two-column layout ─────────────────────────── */}
+      <div className="vendor-profile-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "var(--space-4)", alignItems: "start" }}>
 
         {/* LEFT — Personal Info card */}
         <div className="card">
@@ -266,8 +266,46 @@ export default function VendorProfilePage() {
             </div>
           </div>
         </div>
-
       </div>
+      {editMode && <div className="mobile-only" style={{ height: 72 }} />}
+      {editMode && (
+        <div
+          className="mobile-only"
+          style={{
+            position: "fixed",
+            bottom: "calc(var(--mobile-nav-height, 60px) + var(--space-2))",
+            left: "var(--space-3)",
+            right: "var(--space-3)",
+            background: "var(--color-surface, #ffffff)",
+            padding: "var(--space-3)",
+            borderRadius: "var(--radius-lg)",
+            boxShadow: "0 10px 25px -5px rgba(0,0,0,0.25), 0 8px 10px -6px rgba(0,0,0,0.2)",
+            border: "1px solid var(--border-color)",
+            zIndex: 90,
+            display: "flex",
+            gap: "var(--space-2)",
+            alignItems: "center",
+          }}
+        >
+          <button
+            className="btn btn-ghost"
+            style={{ flex: 1, minHeight: 44 }}
+            onClick={() => setEditMode(false)}
+            disabled={saving}
+          >
+            Cancel
+          </button>
+          <button
+            className="btn btn-primary"
+            style={{ flex: 2, minHeight: 44, fontWeight: 700 }}
+            onClick={handleSave}
+            disabled={saving}
+          >
+            <Save size={16} />
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      )}
     </AppShell>
   );
 }

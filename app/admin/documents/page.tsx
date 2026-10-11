@@ -239,6 +239,19 @@ export default function DocumentsPage() {
         </div>
       </div>
 
+      <style>{`
+        .doc-preview-modal-body {
+          display: flex;
+          gap: var(--space-6);
+        }
+        @media (max-width: 768px) {
+          .doc-preview-modal-body {
+            flex-direction: column;
+            gap: var(--space-4);
+          }
+        }
+      `}</style>
+
       {/* Preview Modal */}
       <Modal
         isOpen={!!previewDoc}
@@ -270,7 +283,7 @@ export default function DocumentsPage() {
         }
       >
         {previewDoc && (
-          <div style={{ display: "flex", gap: "var(--space-6)" }}>
+          <div className="doc-preview-modal-body">
             {/* Image Preview Area */}
             <div style={{ flex: "2", background: "#f8fafc", borderRadius: "var(--radius-md)", overflow: "hidden", display: "flex", flexDirection: "column", gap: "var(--space-4)", padding: "var(--space-4)" }}>
               {previewDoc.pages && previewDoc.pages.length > 0 ? (

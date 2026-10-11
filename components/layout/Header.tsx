@@ -2,6 +2,8 @@
 
 import { Bell, Menu, Search, Settings, Check, CheckCheck, Info, AlertTriangle, XCircle, CheckCircle, X } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { notificationsApi } from "@/lib/api";
 
 interface Notification {
@@ -20,6 +22,7 @@ interface HeaderProps {
   onSidebarToggle: () => void;
   userName?: string;
   userRole?: string;
+  role?: string;
 }
 
 function timeAgo(dateStr: string): string {
@@ -47,8 +50,11 @@ export default function Header({
   onSidebarToggle,
   userName = "Admin User",
   userRole = "Administrator",
+  role,
 }: HeaderProps) {
+  const pathname = usePathname();
   const initials = userName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+  const profileHref = "/vendor/profile";
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -192,12 +198,27 @@ export default function Header({
 
           {/* Notification Panel */}
           {panelOpen && (
-            <div
-              ref={panelRef}
-              className="notif-panel"
-              role="dialog"
-              aria-label="Notifications"
-            >
+            <>
+              {/* Mobile overlay backdrop */}
+              <div
+                className="mobile-only"
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  background: "rgba(10, 27, 74, 0.4)",
+                  backdropFilter: "blur(2px)",
+                  WebkitBackdropFilter: "blur(2px)",
+                  zIndex: 999,
+                }}
+                onClick={() => setPanelOpen(false)}
+                aria-hidden="true"
+              />
+              <div
+                ref={panelRef}
+                className="notif-panel"
+                role="dialog"
+                aria-label="Notifications"
+              >
               {/* Panel Header */}
               <div className="notif-panel-header">
                 <div className="notif-panel-title-row">
@@ -282,6 +303,7 @@ export default function Header({
                 )}
               </div>
             </div>
+            </>
           )}
         </div>
 
@@ -289,13 +311,18 @@ export default function Header({
           <Settings size={18} />
         </button>
 
-        <div className="header-user" role="button" aria-label={`User menu for ${userName}`} tabIndex={0}>
+        <Link
+          href={profileHref}
+          className="header-user"
+          aria-label={`View vendor profile for ${userName}`}
+          style={{ textDecoration: "none" }}
+        >
           <div className="user-avatar" aria-hidden="true">{initials}</div>
           <div className="user-info">
             <span className="user-name">{userName}</span>
             <span className="user-role-badge">{userRole}</span>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* Notification Detail Modal */}

@@ -163,7 +163,7 @@ export default function AdminStallProfilePage({ params }: { params: Promise<{ id
               <Store size={18} style={{ color: "var(--text-muted)" }} />
             </div>
             <div className="card-body">
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-5)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: "var(--space-5)" }}>
                 <div>
                   <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", marginBottom: 4 }}>Status</div>
                   <div style={{ display: "inline-flex", alignItems: "center", padding: "4px 10px", borderRadius: "var(--radius-full)", fontSize: "12px", fontWeight: 700, background: stall.vendor ? "#DCFCE7" : "#F1F5F9", color: stall.vendor ? "#166534" : "#475569" }}>
@@ -188,7 +188,7 @@ export default function AdminStallProfilePage({ params }: { params: Promise<{ id
               <Layers size={18} style={{ color: "var(--text-muted)" }} />
             </div>
             <div className="card-body">
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))", gap: "var(--space-4)" }}>
                 <div className="form-group">
                   <label className="form-label" htmlFor="s-category">Designated Category</label>
                   <div className="form-input-wrapper">

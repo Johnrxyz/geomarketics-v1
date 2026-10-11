@@ -446,7 +446,7 @@ function MapContent() {
 
   // Map padding changes based on viewport
   const mapPadding = isMobile
-    ? { top: 72, right: 16, bottom: drawerOpen ? 300 : 72, left: 16 }
+    ? { top: 68, right: 12, bottom: drawerOpen ? 260 : 72, left: 12 }
     : { top: 80, right: 340, bottom: 20, left: 280 };
 
   /* ── Shared stall list item ── */
@@ -567,7 +567,7 @@ function MapContent() {
       userRole={role === "admin" ? "Administrator" : "Vendor"}
       floatingSidebar={true}
     >
-      <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <div className={`map-page-wrapper${drawerOpen ? " drawer-open" : ""}`} style={{ position: "relative", width: "100%", height: "100%" }}>
 
         {/* ── Map canvas — lowest layer ── */}
         <div style={{ position: "absolute", inset: 0, zIndex: 1 }}>
@@ -598,6 +598,7 @@ function MapContent() {
             COMMAND CENTER — Floating UI Container
         ════════════════════════════════════════ */}
         <aside
+          className="map-command-center"
           style={{
             position: "absolute",
             top: "calc(var(--header-height) - 40px)",
@@ -612,14 +613,14 @@ function MapContent() {
           aria-label="Map controls"
         >
           {/* Search Box */}
-          <div style={{ pointerEvents: "auto", background: "white", borderRadius: "var(--radius-full)", padding: "12px 20px", display: "flex", alignItems: "center", gap: "12px", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "1px solid #E2E8F0", flexShrink: 0 }}>
-            <Search size={20} color="var(--text-muted)" />
+          <div className="map-search-bar" style={{ pointerEvents: "auto", background: "white", borderRadius: "var(--radius-full)", padding: "12px 20px", display: "flex", alignItems: "center", gap: "12px", boxShadow: "0 8px 30px rgba(0,0,0,0.12)", border: "1px solid #E2E8F0", flexShrink: 0 }}>
+            <Search size={18} color="var(--text-muted)" />
             <input
               type="text"
               placeholder="Search stall or vendor…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ flex: 1, border: "none", outline: "none", fontSize: "15px", fontWeight: 600, background: "transparent" }}
+              style={{ flex: 1, border: "none", outline: "none", fontSize: "14px", fontWeight: 600, background: "transparent" }}
             />
             {search && (
               <button onClick={() => setSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", display: "flex", padding: 4 }}>
@@ -632,6 +633,53 @@ function MapContent() {
             .floating-results::-webkit-scrollbar { width: 6px; }
             .floating-results::-webkit-scrollbar-track { background: transparent; }
             .floating-results::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
+
+            @media (max-width: 768px) {
+              .map-command-center {
+                top: 12px !important;
+                left: 12px !important;
+                right: 12px !important;
+                width: auto !important;
+                max-width: none !important;
+                bottom: auto !important;
+                gap: 8px !important;
+              }
+              .map-search-bar {
+                padding: 10px 16px !important;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.10) !important;
+              }
+              .market-map-zoom-controls {
+                top: 72px !important;
+                right: 12px !important;
+                bottom: auto !important;
+                gap: 6px !important;
+              }
+              .market-map-zoom-controls button {
+                width: 38px !important;
+                height: 38px !important;
+                background: rgba(255, 255, 255, 0.95) !important;
+                color: var(--color-accent) !important;
+                border: 1px solid #E2E8F0 !important;
+                border-radius: 10px !important;
+                box-shadow: 0 4px 14px rgba(0,0,0,0.12) !important;
+              }
+              .market-map-floor-controls {
+                bottom: 74px !important;
+                gap: 6px !important;
+              }
+              .market-map-floor-controls button {
+                padding: 8px 16px !important;
+                min-width: 80px !important;
+                min-height: 38px !important;
+                font-size: 13px !important;
+              }
+              .map-page-wrapper.drawer-open .market-map-floor-controls {
+                display: none !important;
+              }
+              .drawer-handle-content {
+                padding-left: 48px !important;
+              }
+            }
           `}</style>
 
           <div className="floating-results desktop-only" style={{ pointerEvents: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "12px", overflowY: "auto", paddingRight: "4px" }}>
@@ -822,9 +870,9 @@ function MapContent() {
             left: 0, right: 0, bottom: 0,
             zIndex: 150,
             display: "flex", flexDirection: "column",
-            transform: drawerOpen ? "translateY(0)" : "translateY(calc(100% - 56px))",
+            transform: drawerOpen ? "translateY(0)" : "translateY(calc(100% - 58px))",
             transition: "transform 0.35s cubic-bezier(0.32, 0.72, 0, 1)",
-            maxHeight: "55vh",
+            maxHeight: "56vh",
           }}
         >
           {/* Drawer card */}
@@ -833,26 +881,67 @@ function MapContent() {
             borderRadius: "20px 20px 0 0",
             display: "flex", flexDirection: "column",
             flex: 1, minHeight: 0, overflow: "hidden",
+            boxShadow: "0 -8px 30px rgba(0,0,0,0.15)",
           }}>
             {/* Handle + toggle row */}
             <button
               onClick={() => setDrawerOpen(o => !o)}
               style={{
-                padding: "12px 16px 0", border: "none", background: "transparent",
+                padding: "8px 16px 8px", border: "none", background: "transparent",
                 cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px",
-                flexShrink: 0,
+                flexShrink: 0, width: "100%"
               }}
               aria-expanded={drawerOpen}
               aria-label={drawerOpen ? "Collapse drawer" : "Expand filters and directory"}
             >
-              <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(0,0,0,0.15)" }} />
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", paddingBottom: "8px" }}>
-                <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--color-accent)" }}>
-                  {drawerOpen ? "Filters & Directory" : `Filters & Directory  ·  ${filtered.length} stalls`}
-                </span>
-                {drawerOpen ? <ChevronDown size={16} style={{ color: "var(--text-muted)" }} /> : <ChevronUp size={16} style={{ color: "var(--text-muted)" }} />}
+              <div style={{ width: 40, height: 4, borderRadius: 2, background: "rgba(0,0,0,0.22)" }} />
+              <div className="drawer-handle-content" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", paddingTop: "2px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <SlidersHorizontal size={14} style={{ color: "var(--color-accent)" }} />
+                  <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--color-accent)" }}>
+                    Filters &amp; Directory
+                  </span>
+                  <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--color-accent)", background: "var(--color-primary)", padding: "2px 8px", borderRadius: "100px" }}>
+                    {filtered.length} stalls
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", color: "var(--text-muted)" }}>
+                  {drawerOpen ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
               </div>
             </button>
+
+            {/* Quick Floor Switcher row inside drawer */}
+            {drawerOpen && (
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "8px 16px", background: "rgba(241, 245, 249, 0.75)",
+                borderTop: "1px solid rgba(0,0,0,0.06)",
+                borderBottom: "1px solid rgba(0,0,0,0.06)", flexShrink: 0,
+              }}>
+                <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", letterSpacing: "0.06em" }}>
+                  Active Floor
+                </span>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  {(["1", "2"] as FloorId[]).map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => handleBuildingFloorChange("main", f)}
+                      style={{
+                        padding: "5px 14px", borderRadius: "100px", border: "none", cursor: "pointer",
+                        fontSize: "12px", fontWeight: 700,
+                        background: activeFloor === f ? "#0EA5E9" : "white",
+                        color: activeFloor === f ? "white" : "var(--text-secondary)",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                        transition: "all 0.15s ease"
+                      }}
+                    >
+                      {f === "1" ? "1st Floor" : "2nd Floor"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Tabs */}
             <div style={{ display: "flex", borderBottom: "1px solid rgba(0,0,0,0.08)", flexShrink: 0 }}>
@@ -877,7 +966,7 @@ function MapContent() {
             </div>
 
             {/* Tab content */}
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehaviorY: "contain", touchAction: "pan-y" }}>
               {mobileTab === "filters" ? (
                 <div style={{ padding: "16px" }}>
                   <div style={{ marginBottom: "16px" }}>

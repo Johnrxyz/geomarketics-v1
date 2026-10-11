@@ -6,6 +6,7 @@ import {
   RefreshCw, Layers, ShieldCheck, XCircle, Search
 } from "lucide-react";
 import { unknownEntitiesApi, marketsApi, pricesApi } from "@/lib/api";
+import AppShell from "@/components/layout/AppShell";
 import Modal from "@/components/ui/Modal";
 
 export default function AdminOperationsCenter() {
@@ -66,21 +67,31 @@ export default function AdminOperationsCenter() {
   };
 
   return (
-    <div style={{ padding: "var(--space-8)", maxWidth: 1400, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", marginBottom: "var(--space-6)" }}>
-        <div style={{ width: 48, height: 48, background: "var(--color-primary)", borderRadius: "var(--radius-md)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-accent)" }}>
-          <ShieldCheck size={28} />
-        </div>
-        <div>
-          <h1 style={{ fontSize: "var(--text-3xl)", fontWeight: 800, color: "var(--color-accent)", margin: 0 }}>Operations Center</h1>
-          <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>Data Ingestion & Quality Assurance Dashboard</div>
+    <AppShell pageTitle="Operations Center" role="admin" userName="Admin" userRole="Administrator">
+      <style>{`
+        .ops-grid {
+          display: grid;
+          grid-template-columns: 2fr 1fr;
+          gap: var(--space-6);
+        }
+        @media (max-width: 900px) {
+          .ops-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
+
+      <div className="page-header">
+        <div className="page-header-left">
+          <h2 className="page-title">Operations Center</h2>
+          <p className="page-subtitle">Data Ingestion & Quality Assurance Dashboard</p>
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "var(--space-5)", marginBottom: "var(--space-8)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "var(--space-4)", marginBottom: "var(--space-6)" }}>
         <div className="stat-card" style={{ borderLeft: "4px solid var(--color-success)" }}>
           <div className="stat-card-icon" style={{ background: "var(--color-success-bg)", color: "var(--color-success)" }}>
-            <FileText size={24} />
+            <FileText size={22} />
           </div>
           <div className="stat-card-content">
             <div className="stat-card-value">1,204</div>
@@ -89,7 +100,7 @@ export default function AdminOperationsCenter() {
         </div>
         <div className="stat-card" style={{ borderLeft: "4px solid var(--color-warning)" }}>
           <div className="stat-card-icon" style={{ background: "var(--color-warning-bg)", color: "var(--color-warning)" }}>
-            <AlertTriangle size={24} />
+            <AlertTriangle size={22} />
           </div>
           <div className="stat-card-content">
             <div className="stat-card-value">{unknownEntities.length}</div>
@@ -98,7 +109,7 @@ export default function AdminOperationsCenter() {
         </div>
         <div className="stat-card" style={{ borderLeft: "4px solid var(--color-info)" }}>
           <div className="stat-card-icon" style={{ background: "var(--color-info-bg)", color: "var(--color-info)" }}>
-            <Database size={24} />
+            <Database size={22} />
           </div>
           <div className="stat-card-content">
             <div className="stat-card-value">99.8%</div>
@@ -107,7 +118,7 @@ export default function AdminOperationsCenter() {
         </div>
         <div className="stat-card" style={{ borderLeft: "4px solid #8B5CF6" }}>
           <div className="stat-card-icon" style={{ background: "#EDE9FE", color: "#8B5CF6" }}>
-            <Layers size={24} />
+            <Layers size={22} />
           </div>
           <div className="stat-card-content">
             <div className="stat-card-value">142</div>
@@ -116,11 +127,11 @@ export default function AdminOperationsCenter() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "var(--space-6)" }}>
+      <div className="ops-grid">
         
         {/* Unknown Entity Queue */}
         <div className="card">
-          <div className="card-header">
+          <div className="card-header" style={{ flexWrap: "wrap", gap: "var(--space-2)" }}>
             <div>
               <h2 className="card-title">Unknown Entity Queue</h2>
               <div className="card-subtitle">Require manual mapping to canonical models before re-processing</div>
@@ -139,43 +150,45 @@ export default function AdminOperationsCenter() {
               <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>All ingested entities have been successfully mapped.</div>
             </div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--text-sm)" }}>
-              <thead style={{ background: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
-                <tr>
-                  <th style={{ padding: "var(--space-3) var(--space-4)", textAlign: "left", color: "var(--text-muted)" }}>Raw Name (Extracted)</th>
-                  <th style={{ padding: "var(--space-3) var(--space-4)", textAlign: "left", color: "var(--text-muted)" }}>Type</th>
-                  <th style={{ padding: "var(--space-3) var(--space-4)", textAlign: "left", color: "var(--text-muted)" }}>Source Document</th>
-                  <th style={{ padding: "var(--space-3) var(--space-4)", textAlign: "left", color: "var(--text-muted)" }}>Occurrences</th>
-                  <th style={{ padding: "var(--space-3) var(--space-4)", textAlign: "right" }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {unknownEntities.map(entity => (
-                  <tr key={entity.id} style={{ borderBottom: "1px solid #E5E7EB" }}>
-                    <td style={{ padding: "var(--space-3) var(--space-4)", fontWeight: 600 }}>"{entity.raw_name}"</td>
-                    <td style={{ padding: "var(--space-3) var(--space-4)" }}>
-                      <span className={`badge ${entity.entity_type === 'market' ? 'badge-info' : 'badge-warning'}`}>
-                        {entity.entity_type}
-                      </span>
-                    </td>
-                    <td style={{ padding: "var(--space-3) var(--space-4)", color: "var(--text-secondary)" }}>
-                      {entity.source_document_filename || "Unknown PDF"}
-                    </td>
-                    <td style={{ padding: "var(--space-3) var(--space-4)" }}>{entity.occurrence_count}</td>
-                    <td style={{ padding: "var(--space-3) var(--space-4)", textAlign: "right" }}>
-                      <button className="btn btn-primary btn-sm" onClick={() => openResolveModal(entity)}>
-                        Resolve
-                      </button>
-                    </td>
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--text-sm)", minWidth: 500 }}>
+                <thead style={{ background: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
+                  <tr>
+                    <th style={{ padding: "var(--space-3) var(--space-4)", textAlign: "left", color: "var(--text-muted)" }}>Raw Name</th>
+                    <th style={{ padding: "var(--space-3) var(--space-4)", textAlign: "left", color: "var(--text-muted)" }}>Type</th>
+                    <th style={{ padding: "var(--space-3) var(--space-4)", textAlign: "left", color: "var(--text-muted)" }}>Source Document</th>
+                    <th style={{ padding: "var(--space-3) var(--space-4)", textAlign: "left", color: "var(--text-muted)" }}>Count</th>
+                    <th style={{ padding: "var(--space-3) var(--space-4)", textAlign: "right" }}>Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {unknownEntities.map(entity => (
+                    <tr key={entity.id} style={{ borderBottom: "1px solid #E5E7EB" }}>
+                      <td style={{ padding: "var(--space-3) var(--space-4)", fontWeight: 600 }}>"{entity.raw_name}"</td>
+                      <td style={{ padding: "var(--space-3) var(--space-4)" }}>
+                        <span className={`badge ${entity.entity_type === 'market' ? 'badge-info' : 'badge-warning'}`}>
+                          {entity.entity_type}
+                        </span>
+                      </td>
+                      <td style={{ padding: "var(--space-3) var(--space-4)", color: "var(--text-secondary)" }}>
+                        {entity.source_document_filename || "Unknown PDF"}
+                      </td>
+                      <td style={{ padding: "var(--space-3) var(--space-4)" }}>{entity.occurrence_count}</td>
+                      <td style={{ padding: "var(--space-3) var(--space-4)", textAlign: "right" }}>
+                        <button className="btn btn-primary btn-sm" onClick={() => openResolveModal(entity)}>
+                          Resolve
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
         {/* QA Dashboard & Actions */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
           <div className="card">
             <div className="card-header"><h2 className="card-title">Data Quality Checks</h2></div>
             <div className="card-body" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
@@ -273,6 +286,6 @@ export default function AdminOperationsCenter() {
         )}
       </Modal>
 
-    </div>
+    </AppShell>
   );
 }

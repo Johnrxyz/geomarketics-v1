@@ -248,6 +248,7 @@ h1, h2, h3, h4, h5, h6 {
   padding: var(--space-5) var(--space-4);
   min-height: var(--header-height);
   border-bottom: 1px solid rgba(255,255,255,0.1);
+  flex-shrink: 0;
 }
 
 .sidebar-logo-icon {
@@ -280,10 +281,14 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .sidebar-nav {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: var(--space-4) var(--space-2);
   overflow-y: auto;
   overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
 }
 
 .sidebar-section-label {
@@ -352,6 +357,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .sidebar-bottombar {
+  flex-shrink: 0;
   padding: var(--space-4) var(--space-2);
   border-top: 1px solid rgba(255,255,255,0.1);
 }
@@ -877,6 +883,24 @@ h1, h2, h3, h4, h5, h6 {
 .btn-lg {
   padding: var(--space-3) var(--space-8);
   font-size: var(--text-md);
+}
+
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.btn-icon svg {
+  flex-shrink: 0;
+  display: block;
 }
 
 .btn:disabled {
@@ -1580,31 +1604,106 @@ h1, h2, h3, h4, h5, h6 {
     top: 0;
     left: 0;
     height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
     border-radius: 0;
     transform: translateX(calc(-100% - 20px)); /* extra 20px ensures shadow doesn't peek */
     transition: transform var(--transition-base);
     z-index: var(--z-sidebar);
     box-shadow: none;
+    overscroll-behavior: contain;
   }
 
-  /* When opened via hamburger, slide in from left */
+  /* When opened via hamburger, slide in from left (takes precedence over collapsed) */
   .sidebar.mobile-open {
-    transform: translateX(0);
-    box-shadow: 4px 0 30px rgba(0, 0, 0, 0.3);
+    transform: translateX(0) !important;
+    box-shadow: 4px 0 30px rgba(0, 0, 0, 0.4) !important;
+    width: min(var(--sidebar-width), 85vw) !important;
   }
 
-  /* Collapsed sidebar still slides off fully on mobile */
-  .sidebar.collapsed {
-    transform: translateX(calc(-100% - 20px));
-    width: var(--sidebar-width); /* keep width so open animation looks right */
+  /* When open on mobile, ensure text and labels are visible even if collapsed flag was toggled */
+  .sidebar.mobile-open .sidebar-logo-text,
+  .sidebar.mobile-open .sidebar-link-text,
+  .sidebar.mobile-open .sidebar-section-label {
+    display: block !important;
+  }
+
+  /* Collapsed sidebar stays off-screen on mobile when not open */
+  .sidebar.collapsed:not(.mobile-open) {
+    transform: translateX(calc(-100% - 20px)) !important;
+    width: var(--sidebar-width);
+  }
+
+  /* Smooth, uninhibited mobile touch scrolling for sidebar links */
+  .sidebar-nav {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-y: contain !important;
+    touch-action: pan-y !important;
+  }
+
+  .sidebar-nav::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .sidebar-nav::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+  }
+
+  .sidebar-bottombar {
+    flex-shrink: 0 !important;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .mobile-sidebar-close-btn {
+    display: flex !important;
   }
 
   .page-main {
     padding: var(--space-4);
   }
 
-  .grid-4, .grid-3, .grid-2 {
+  .grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-3);
+  }
+
+  .grid-3, .grid-2 {
     grid-template-columns: 1fr;
+  }
+
+  .stat-card {
+    padding: var(--space-3);
+    gap: var(--space-2);
+    border-radius: var(--radius-md);
+  }
+
+  .stat-card-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: var(--radius-sm);
+  }
+
+  .stat-card-icon svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  .stat-card-value {
+    font-size: var(--text-xl);
+  }
+
+  .stat-card-label {
+    font-size: var(--text-xs);
+  }
+
+  .stat-card-trend {
+    font-size: 11px;
+    margin-top: 2px;
   }
 
   .page-header {
@@ -1615,6 +1714,63 @@ h1, h2, h3, h4, h5, h6 {
   /* Hide the user-info text on small screens to save header space */
   .user-info {
     display: none;
+  }
+
+  /* Header adjustments on mobile */
+  .header-page-title {
+    font-size: 15px;
+    font-weight: 700;
+    max-width: 180px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .header-right {
+    gap: var(--space-2);
+  }
+
+  /* Hide redundant/non-functional header buttons on mobile to avoid overcrowding */
+  .header-right .header-icon-btn[aria-label="Search"],
+  .header-right .header-icon-btn[aria-label="Settings"] {
+    display: none !important;
+  }
+
+  /* Notification panel: on mobile, display full width centered within screen, no overflow */
+  .notif-panel {
+    position: fixed !important;
+    top: calc(var(--header-height, 60px) + 8px) !important;
+    left: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+    max-width: 440px !important;
+    margin: 0 auto !important;
+    max-height: calc(82vh - var(--header-height, 60px)) !important;
+    z-index: 1000 !important;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.22), 0 4px 16px rgba(0, 0, 0, 0.12) !important;
+    border-radius: var(--radius-xl) !important;
+  }
+
+  .notif-panel-header {
+    padding: 12px 14px 10px !important;
+  }
+
+  .notif-panel-actions {
+    gap: 4px !important;
+  }
+
+  .notif-mark-all-btn {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+  }
+
+  .notif-item {
+    padding: 10px 14px !important;
+  }
+
+  /* Responsive vendor grids */
+  .vendor-profile-grid {
+    grid-template-columns: 1fr !important;
   }
 
   /* Complaints: show mobile layout, hide desktop */

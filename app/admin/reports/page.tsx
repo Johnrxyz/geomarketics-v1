@@ -255,7 +255,7 @@ export default function ReportsPage() {
               </div>
               <div className="card-body" style={{paddingTop:0}}>
                 <div className="chart-container">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
                     <PieChart>
                       <Pie
                         data={occupancyPie}
@@ -293,7 +293,7 @@ export default function ReportsPage() {
               </div>
               <div className="card-body" style={{paddingTop:0}}>
                 <div className="chart-container">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
                     <BarChart data={sectionBarData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                       <XAxis dataKey="section" tick={{fontSize:10}} stroke="#D1D5DB" />
@@ -327,7 +327,7 @@ export default function ReportsPage() {
             </div>
             <div className="card-body" style={{paddingTop:0}}>
               <div style={{height:200}}>
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={180}>
                   <LineChart data={complaintTrend}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                     <XAxis dataKey="month" tick={{fontSize:11}} stroke="#D1D5DB" />

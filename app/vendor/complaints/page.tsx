@@ -420,7 +420,7 @@ export default function VendorComplaintsPage() {
 
       {/* ══════════════════ TAB: File a Complaint ═══════════════════════ */}
       {tab === "file" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-5)", alignItems: "start" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "var(--space-5)", alignItems: "start" }}>
 
           {/* ── Left: submission form ──────────────────────────────── */}
           <div className="card">
@@ -447,7 +447,7 @@ export default function VendorComplaintsPage() {
                   <label style={{ display: "block", fontSize: "var(--text-xs)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", marginBottom: 8 }}>
                     Issue Category <span style={{ color: "var(--color-error)" }}>*</span>
                   </label>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 6 }}>
                     {(Object.entries(CATEGORY_CONFIG) as [string, { emoji: string; desc: string }][]).map(([val, cfg]) => {
                       const isSelected = form.category === val;
                       return (

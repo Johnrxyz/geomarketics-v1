@@ -336,16 +336,18 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div className="card-body" style={{ paddingTop: "0" }}>
-            <div className="chart-container">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data?.complaints_by_category ?? []}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                  <XAxis dataKey="category" tick={{ fontSize: 11 }} stroke="#D1D5DB" />
-                  <YAxis tick={{ fontSize: 11 }} stroke="#D1D5DB" />
-                  <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #E5E7EB", fontSize: "12px" }} />
-                  <Bar dataKey="count" fill="#11296B" radius={[4, 4, 0, 0]} name="Complaints" />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="chart-container" style={{ minWidth: 0, minHeight: 200 }}>
+              {isMounted ? (
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
+                  <BarChart data={data?.complaints_by_category ?? []}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                    <XAxis dataKey="category" tick={{ fontSize: 11 }} stroke="#D1D5DB" />
+                    <YAxis tick={{ fontSize: 11 }} stroke="#D1D5DB" />
+                    <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #E5E7EB", fontSize: "12px" }} />
+                    <Bar dataKey="count" fill="#11296B" radius={[4, 4, 0, 0]} name="Complaints" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <div style={{ height: "100%", width: "100%" }} />}
             </div>
             {complaintsInsight && (
               <div style={{ marginTop: "16px", padding: "12px", background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: "8px", display: "flex", gap: "8px", alignItems: "flex-start" }}>
@@ -594,7 +596,7 @@ export default function DashboardPage() {
           </div>
           <div style={{ height: 220, width: "100%", marginBottom: "var(--space-4)" }}>
             {isMounted ? (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={180}>
                 <AreaChart data={activeCommodity.historicalData || HISTORICAL_DATA} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="dashColorPrice" x1="0" y1="0" x2="0" y2="1">

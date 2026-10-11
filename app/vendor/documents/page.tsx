@@ -196,7 +196,7 @@ export default function VendorDocumentsPage() {
           {/* Document Type Selector — Card style, no dropdown */}
           <div style={{ marginBottom: "var(--space-5)" }}>
             <label className="form-label" style={{ marginBottom: "var(--space-2)", display: "block" }}>What are you uploading?</label>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "var(--space-3)" }}>
               {([
                 { value: "business_permit", icon: "🏛️", label: "Business Permit", sub: "Single page" },
                 { value: "contract",        icon: "📋", label: "Vendor Contract", sub: "3 pages required" },

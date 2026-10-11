@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { announcementsApi } from '@/lib/api';
-import { Plus, Edit2, Trash2, Megaphone, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Edit3, Trash2, Megaphone, CheckCircle, XCircle } from 'lucide-react';
 import AppShell from '@/components/layout/AppShell';
 
 export default function AdminAnnouncementsPage() {
@@ -125,7 +125,8 @@ export default function AdminAnnouncementsPage() {
       </div>
 
       <div className="card">
-        <div className="data-table-wrapper">
+        {/* DESKTOP TABLE VIEW */}
+        <div className="data-table-wrapper desktop-only">
           <table className="data-table">
             <thead>
               <tr>
@@ -134,60 +135,154 @@ export default function AdminAnnouncementsPage() {
                 <th>Priority</th>
                 <th>Status</th>
                 <th>Author</th>
-                <th>Actions</th>
+                <th style={{ textAlign: "right" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-                    {isLoading ? (
-                      <tr>
-                        <td colSpan={6} style={{textAlign:"center",padding:"var(--space-8)",color:"var(--text-muted)"}}>Loading announcements...</td>
-                      </tr>
-                    ) : announcements.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} style={{textAlign:"center",padding:"var(--space-8)",color:"var(--text-muted)"}}>No announcements found.</td>
-                      </tr>
-                    ) : (
-                      announcements.map((announcement) => (
-                        <tr key={announcement.id}>
-                          <td>
-                            <div style={{fontWeight:600}}>{announcement.title}</div>
-                            <div style={{fontSize:"var(--text-xs)",color:"var(--text-muted)"}}>{announcement.content}</div>
-                          </td>
-                          <td>
-                            <span className="badge badge-outline" style={{textTransform:"capitalize"}}>
-                              {announcement.category}
-                            </span>
-                          </td>
-                          <td>
-                            <span className={`badge ${announcement.priority === 'high' ? 'badge-error' : announcement.priority === 'medium' ? 'badge-warning' : 'badge-success'}`} style={{textTransform:"capitalize"}}>
-                              {announcement.priority}
-                            </span>
-                          </td>
-                          <td>
-                            {announcement.is_active ? (
-                              <span className="badge badge-success" style={{display:"inline-flex",alignItems:"center",gap:"4px"}}><CheckCircle size={12}/> Active</span>
-                            ) : (
-                              <span className="badge badge-outline" style={{display:"inline-flex",alignItems:"center",gap:"4px"}}><XCircle size={12}/> Inactive</span>
-                            )}
-                          </td>
-                          <td>{announcement.author_name || 'Admin'}</td>
-                          <td>
-                            <div style={{display:"flex",gap:"var(--space-2)"}}>
-                              <button onClick={() => handleOpenModal(announcement)} className="btn btn-ghost btn-sm" title="Edit">
-                                <Edit2 size={14} />
-                              </button>
-                              <button onClick={() => handleDelete(announcement.id)} className="btn btn-ghost btn-sm" style={{color:"var(--color-error)"}} title="Delete">
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: "center", padding: "var(--space-8)", color: "var(--text-muted)" }}>
+                    Loading announcements...
+                  </td>
+                </tr>
+              ) : announcements.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: "center", padding: "var(--space-8)", color: "var(--text-muted)" }}>
+                    No announcements found.
+                  </td>
+                </tr>
+              ) : (
+                announcements.map((announcement) => (
+                  <tr key={announcement.id}>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{announcement.title}</div>
+                      <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{announcement.content}</div>
+                    </td>
+                    <td>
+                      <span className="badge badge-outline" style={{ textTransform: "capitalize" }}>
+                        {announcement.category}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`badge ${announcement.priority === 'high' ? 'badge-error' : announcement.priority === 'medium' ? 'badge-warning' : 'badge-success'}`} style={{ textTransform: "capitalize" }}>
+                        {announcement.priority}
+                      </span>
+                    </td>
+                    <td>
+                      {announcement.is_active ? (
+                        <span className="badge badge-success" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          <CheckCircle size={12} /> Active
+                        </span>
+                      ) : (
+                        <span className="badge badge-outline" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          <XCircle size={12} /> Inactive
+                        </span>
+                      )}
+                    </td>
+                    <td>{announcement.author_name || 'Market Administrator'}</td>
+                    <td style={{ textAlign: "right" }}>
+                      <div style={{ display: "inline-flex", gap: "var(--space-2)", alignItems: "center", justifyContent: "flex-end" }}>
+                        <button
+                          onClick={() => handleOpenModal(announcement)}
+                          className="btn btn-ghost btn-sm btn-icon"
+                          style={{ width: 34, height: 34, color: "var(--color-primary)" }}
+                          title="Edit Announcement"
+                          aria-label="Edit Announcement"
+                        >
+                          <Edit3 size={15} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(announcement.id)}
+                          className="btn btn-ghost btn-sm btn-icon"
+                          style={{ width: 34, height: 34, color: "var(--color-error)", borderColor: "#FEE2E2" }}
+                          title="Delete Announcement"
+                          aria-label="Delete Announcement"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* MOBILE CARDS VIEW */}
+        <div className="mobile-only" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "var(--space-3)" }}>
+          {isLoading ? (
+            <p style={{ textAlign: "center", padding: "var(--space-6)", color: "var(--text-muted)" }}>Loading announcements...</p>
+          ) : announcements.length === 0 ? (
+            <p style={{ textAlign: "center", padding: "var(--space-6)", color: "var(--text-muted)" }}>No announcements found.</p>
+          ) : (
+            announcements.map((announcement) => (
+              <div
+                key={announcement.id}
+                style={{
+                  background: "var(--bg-secondary, #F9FAFB)",
+                  border: "1px solid var(--border-color)",
+                  borderRadius: "var(--radius-md)",
+                  padding: "var(--space-3)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "var(--space-2)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <span className={`badge ${announcement.priority === 'high' ? 'badge-error' : announcement.priority === 'medium' ? 'badge-warning' : 'badge-success'}`} style={{ textTransform: "capitalize" }}>
+                      {announcement.priority}
+                    </span>
+                    <span className="badge badge-outline" style={{ textTransform: "capitalize" }}>
+                      {announcement.category}
+                    </span>
+                  </div>
+                  {announcement.is_active ? (
+                    <span className="badge badge-success" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                      <CheckCircle size={12} /> Active
+                    </span>
+                  ) : (
+                    <span className="badge badge-outline" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                      <XCircle size={12} /> Inactive
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ fontSize: "var(--text-base)", fontWeight: 700, color: "var(--text-primary)" }}>
+                  {announcement.title}
+                </div>
+
+                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)", lineHeight: 1.4, background: "#ffffff", padding: "var(--space-2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)" }}>
+                  {announcement.content}
+                </div>
+
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", display: "flex", justifyContent: "space-between" }}>
+                  <span>Author: {announcement.author_name || 'Market Administrator'}</span>
+                </div>
+
+                {/* Mobile Action Buttons */}
+                <div style={{ display: "flex", gap: "var(--space-2)", marginTop: 4 }}>
+                  <button
+                    onClick={() => handleOpenModal(announcement)}
+                    className="btn btn-secondary btn-sm"
+                    style={{ flex: 1, minHeight: 38, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontWeight: 600 }}
+                  >
+                    <Edit3 size={14} /> Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(announcement.id)}
+                    className="btn btn-ghost btn-sm"
+                    style={{ flex: 1, minHeight: 38, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, color: "var(--color-error)", borderColor: "#FEE2E2", fontWeight: 600 }}
+                  >
+                    <Trash2 size={14} /> Delete
+                  </button>
+                </div>
               </div>
-            </div>
+            ))
+          )}
+        </div>
+      </div>
 
       {/* Modal */}
       {isModalOpen && (
@@ -214,8 +309,8 @@ export default function AdminAnnouncementsPage() {
                 <textarea required rows={4} className="form-input" style={{resize:"vertical"}} value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} />
               </div>
 
-              <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:"var(--space-4)"}}>
-                <div className="form-group">
+              <div className="modal-form-grid" style={{ marginBottom: "var(--space-4)" }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Category</label>
                   <select className="form-select" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
                     <option value="schedule">Schedule Change</option>
@@ -225,7 +320,7 @@ export default function AdminAnnouncementsPage() {
                     <option value="general">General</option>
                   </select>
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Priority</label>
                   <select className="form-select" value={formData.priority} onChange={e => setFormData({...formData, priority: e.target.value})}>
                     <option value="low">Low</option>
@@ -235,12 +330,12 @@ export default function AdminAnnouncementsPage() {
                 </div>
               </div>
 
-              <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:"var(--space-4)"}}>
-                <div className="form-group">
+              <div className="modal-form-grid" style={{ marginBottom: "var(--space-4)" }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Start Date (Optional)</label>
                   <input type="datetime-local" className="form-input" value={formData.start_date} onChange={e => setFormData({...formData, start_date: e.target.value})} />
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">End Date (Optional)</label>
                   <input type="datetime-local" className="form-input" value={formData.end_date} onChange={e => setFormData({...formData, end_date: e.target.value})} />
                 </div>

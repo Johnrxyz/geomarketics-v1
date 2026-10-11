@@ -33,51 +33,125 @@ export default function VendorViolationsPage() {
         </div>
       </div>
       
+      <style>{`
+        .viol-card-list {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .viol-card {
+          background: white;
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          padding: var(--space-4);
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+          transition: transform 0.1s ease, box-shadow 0.1s ease;
+        }
+        .viol-card:active {
+          transform: scale(0.99);
+        }
+        .viol-card-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 8px;
+        }
+      `}</style>
+
       <div className="card">
         <div className="card-body">
-          {loading ? <p>Loading...</p> : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", textAlign: "left", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid var(--border-color)", color: "var(--text-muted)", fontSize: "0.875rem" }}>
-                    <th style={{ padding: "12px 8px" }}>Date</th>
-                    <th style={{ padding: "12px 8px" }}>Type</th>
-                    <th style={{ padding: "12px 8px" }}>Severity</th>
-                    <th style={{ padding: "12px 8px" }}>Status</th>
-                    <th style={{ padding: "12px 8px", textAlign: "right" }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {violations.map(v => (
-                    <tr key={v.id} style={{ borderBottom: "1px solid var(--border-color)", fontSize: "0.875rem" }}>
-                      <td style={{ padding: "12px 8px" }}>{new Date(v.violation_date || v.created_at).toLocaleDateString()}</td>
-                      <td style={{ padding: "12px 8px" }}>{v.violation_type}</td>
-                      <td style={{ padding: "12px 8px" }}>
-                        <span className={`badge ${v.severity === 'critical' ? 'badge-error' : v.severity === 'major' ? 'badge-warning' : 'badge-info'}`}>
-                          {v.severity_display || v.severity}
-                        </span>
-                      </td>
-                      <td style={{ padding: "12px 8px" }}>
-                        <span className={`badge ${v.status === 'resolved' ? 'badge-success' : 'badge-open'}`}>
-                          {v.status_display || v.status}
-                        </span>
-                      </td>
-                      <td style={{ padding: "12px 8px", textAlign: "right" }}>
-                        <button 
-                          onClick={() => setSelectedViolation(v)}
-                          className="btn-secondary" 
-                          style={{ padding: "6px 12px", fontSize: "0.8rem" }}>
-                          View Details
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {violations.length === 0 && (
-                    <tr><td colSpan={5} style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>No violations recorded. Keep up the good work!</td></tr>
-                  )}
-                </tbody>
-              </table>
+          {loading ? (
+            <p style={{ textAlign: "center", padding: "var(--space-8)", color: "var(--text-muted)" }}>Loading records...</p>
+          ) : violations.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "var(--space-8)", color: "var(--text-muted)" }}>
+              No violations recorded. Keep up the good work!
             </div>
+          ) : (
+            <>
+              {/* Mobile Card List (visible on <= 768px) */}
+              <div className="mobile-only viol-card-list">
+                {violations.map((v) => (
+                  <div key={v.id} className="viol-card">
+                    <div className="viol-card-header">
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: "15px", color: "var(--text-primary)" }}>
+                          {v.violation_type}
+                        </div>
+                        <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: 2 }}>
+                          {new Date(v.violation_date || v.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        </div>
+                      </div>
+                      <span className={`badge ${v.severity === 'critical' ? 'badge-error' : v.severity === 'major' ? 'badge-warning' : 'badge-info'}`}>
+                        {v.severity_display || v.severity}
+                      </span>
+                    </div>
+
+                    {v.description && (
+                      <div style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                        {v.description}
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "1px solid #F1F5F9", paddingTop: 8, marginTop: 2 }}>
+                      <span className={`badge ${v.status === 'resolved' ? 'badge-success' : 'badge-open'}`}>
+                        {v.status_display || v.status}
+                      </span>
+                      <button
+                        onClick={() => setSelectedViolation(v)}
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: "6px 14px", fontSize: "12px", fontWeight: 600 }}
+                      >
+                        View Details
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table (visible on >= 769px) */}
+              <div className="desktop-only" style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", textAlign: "left", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--border-color)", color: "var(--text-muted)", fontSize: "0.875rem" }}>
+                      <th style={{ padding: "12px 8px" }}>Date</th>
+                      <th style={{ padding: "12px 8px" }}>Type</th>
+                      <th style={{ padding: "12px 8px" }}>Severity</th>
+                      <th style={{ padding: "12px 8px" }}>Status</th>
+                      <th style={{ padding: "12px 8px", textAlign: "right" }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {violations.map((v) => (
+                      <tr key={v.id} style={{ borderBottom: "1px solid var(--border-color)", fontSize: "0.875rem" }}>
+                        <td style={{ padding: "12px 8px" }}>{new Date(v.violation_date || v.created_at).toLocaleDateString()}</td>
+                        <td style={{ padding: "12px 8px", fontWeight: 600 }}>{v.violation_type}</td>
+                        <td style={{ padding: "12px 8px" }}>
+                          <span className={`badge ${v.severity === 'critical' ? 'badge-error' : v.severity === 'major' ? 'badge-warning' : 'badge-info'}`}>
+                            {v.severity_display || v.severity}
+                          </span>
+                        </td>
+                        <td style={{ padding: "12px 8px" }}>
+                          <span className={`badge ${v.status === 'resolved' ? 'badge-success' : 'badge-open'}`}>
+                            {v.status_display || v.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: "12px 8px", textAlign: "right" }}>
+                          <button 
+                            onClick={() => setSelectedViolation(v)}
+                            className="btn btn-secondary btn-sm" 
+                            style={{ padding: "6px 12px", fontSize: "0.8rem" }}>
+                            View Details
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       </div>

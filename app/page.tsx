@@ -5,7 +5,8 @@ import Link from "next/link";
 import {
   TrendingUp, TrendingDown, Minus, Activity, ShoppingBag, MapPin, Search,
   AlertCircle, Info, ChevronRight, ChevronLeft, BarChart2, Star, Calculator, Bookmark, Bell, X, Send,
-  ChefHat, Utensils, CheckCircle, ArrowDown, ArrowUp, Map, Calendar, Clock, Megaphone, AlertTriangle, Shield, Menu
+  ChefHat, Utensils, CheckCircle, ArrowDown, ArrowUp, Map, Calendar, Clock, Megaphone, AlertTriangle, Shield, Menu,
+  Pause, Play
 } from "lucide-react";
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceDot } from "recharts";
 import { complaintsApi, stallsApi } from "@/lib/api";
@@ -179,6 +180,7 @@ export default function LucenaDecisionSupport() {
   const [staples, setStaples] = useState<any[]>(STAPLES);
   const [marketsData, setMarketsData] = useState<any[]>(MARKETS);
   const [isLoading, setIsLoading] = useState(true);
+  const [useMockData, setUseMockData] = useState(false);
   const [latestDataDate, setLatestDataDate] = useState<string | null>(null);
 
   const [categories, setCategories] = useState<string[]>(['All']);
@@ -193,7 +195,77 @@ export default function LucenaDecisionSupport() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const itemsPerPage = isMobileGrid ? 6 : 12;
+  const itemsPerPage = 12;
+
+  // Mobile infinite carousel ref and controls
+  const mobileCarouselRef = useRef<HTMLDivElement>(null);
+  const isInteractingMobileRef = useRef(false);
+  const resumeMobileTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
+
+  useEffect(() => {
+    if (!isMobileGrid) return;
+    const container = mobileCarouselRef.current;
+    if (!container) return;
+
+    let animId: number;
+    const scrollStep = () => {
+      if (!isInteractingMobileRef.current && !isAutoScrollPaused && container) {
+        const halfWidth = container.scrollWidth / 2;
+        if (halfWidth > container.clientWidth) {
+          if (container.scrollLeft >= halfWidth) {
+            container.scrollLeft -= halfWidth;
+          } else {
+            container.scrollLeft += 0.65;
+          }
+        }
+      }
+      animId = requestAnimationFrame(scrollStep);
+    };
+
+    animId = requestAnimationFrame(scrollStep);
+    return () => {
+      cancelAnimationFrame(animId);
+      if (resumeMobileTimeoutRef.current) clearTimeout(resumeMobileTimeoutRef.current);
+    };
+  }, [isMobileGrid, activeCategory, isAutoScrollPaused]);
+
+  const handleMobileTouchStart = () => {
+    isInteractingMobileRef.current = true;
+    if (resumeMobileTimeoutRef.current) clearTimeout(resumeMobileTimeoutRef.current);
+  };
+
+  const handleMobileTouchEnd = () => {
+    if (resumeMobileTimeoutRef.current) clearTimeout(resumeMobileTimeoutRef.current);
+    resumeMobileTimeoutRef.current = setTimeout(() => {
+      isInteractingMobileRef.current = false;
+    }, 1800);
+  };
+
+  const handleMobileScroll = () => {
+    const container = mobileCarouselRef.current;
+    if (!container) return;
+    const halfWidth = container.scrollWidth / 2;
+    if (halfWidth > container.clientWidth) {
+      if (container.scrollLeft >= halfWidth + 40) {
+        container.scrollLeft -= halfWidth;
+      } else if (container.scrollLeft <= 0) {
+        container.scrollLeft += halfWidth;
+      }
+    }
+  };
+
+  const scrollMobileCarousel = (direction: "left" | "right") => {
+    const container = mobileCarouselRef.current;
+    if (!container) return;
+    isInteractingMobileRef.current = true;
+    const step = 200; // 1 card column + gap
+    container.scrollBy({ left: direction === "right" ? step : -step, behavior: "smooth" });
+    if (resumeMobileTimeoutRef.current) clearTimeout(resumeMobileTimeoutRef.current);
+    resumeMobileTimeoutRef.current = setTimeout(() => {
+      isInteractingMobileRef.current = false;
+    }, 2200);
+  };
 
   // State for Login Modal
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -202,6 +274,9 @@ export default function LucenaDecisionSupport() {
   const handleCategoryChange = (cat: string) => {
     setActiveCategory(cat);
     setCurrentPage(1);
+    if (mobileCarouselRef.current) {
+      mobileCarouselRef.current.scrollTo({ left: 0, behavior: "smooth" });
+    }
   };
 
   // State for Smart Ulam Calculator
@@ -348,18 +423,23 @@ export default function LucenaDecisionSupport() {
     setIsSubmittingComplaint(true);
     try {
       const formData = new FormData();
+
+      // Build a single, final description — include stall reference if typed but not matched
+      let finalDescription = complaintForm.description;
       if (complaintForm.stall) {
         const found = stallsList.find(s => s.stall_number.toLowerCase() === complaintForm.stall.toLowerCase());
         if (found) {
           formData.append('stall', found.id.toString());
         } else {
-          formData.append('description', `[Reported Stall: ${complaintForm.stall}]\n\n${complaintForm.description}`);
+          // Stall typed but not found in DB — prepend it to the description for admin context
+          finalDescription = `[Reported Stall: ${complaintForm.stall}]\n\n${complaintForm.description}`;
         }
       }
+
       formData.append('category', complaintForm.category);
-      formData.append('description', complaintForm.description);
+      formData.append('description', finalDescription);
       formData.append('complainant_contact', complaintForm.email);
-      formData.append('subject', `Public Complaint regarding ${complaintForm.category}`);
+      formData.append('subject', `Public Complaint: ${complaintForm.category}`);
       if (complaintForm.file) {
         formData.append('evidence_file', complaintForm.file);
       }
@@ -373,6 +453,7 @@ export default function LucenaDecisionSupport() {
       setIsSubmittingComplaint(false);
     }
   };
+
 
   // State for Historical Explorer
   const [activeCommodity, setActiveCommodity] = useState(STAPLES[1]); // Default Tomato
@@ -548,6 +629,7 @@ export default function LucenaDecisionSupport() {
         }
       } catch (error) {
         console.error("Failed to load live data, falling back to mock:", error);
+        setUseMockData(true);
       } finally {
         setIsLoading(false);
       }
@@ -724,6 +806,7 @@ export default function LucenaDecisionSupport() {
             .nav-actions { display: none; }
             .nav-actions.open {
               display: flex; flex-direction: column; align-items: stretch; position: absolute; top: 100%; left: 0; right: 0; background: white; padding: 16px; border-bottom: 1px solid #E5E7EB; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); z-index: 99;
+              max-height: calc(100dvh - 75px); overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;
             }
             .nav-actions.open > * { width: 100%; justify-content: flex-start; }
           }
@@ -744,11 +827,16 @@ export default function LucenaDecisionSupport() {
           </button>
 
           <div className={`nav-actions ${isMobileMenuOpen ? 'open' : ''}`}>
-            {latestDataDate && (
+            {useMockData ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", background: "#FEF3C7", color: "#92400E", padding: "6px 14px", borderRadius: "var(--radius-full)", fontWeight: 700, fontSize: "var(--text-sm)", border: "1px solid #FCD34D" }}>
+                <AlertTriangle size={16} /> Demo Data — API Unavailable
+              </div>
+            ) : latestDataDate && (
               <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", background: "#ECFDF5", color: "#047857", padding: "6px 14px", borderRadius: "var(--radius-full)", fontWeight: 700, fontSize: "var(--text-sm)", border: "1px solid #A7F3D0", boxShadow: "0 2px 4px rgba(16, 185, 129, 0.1)" }}>
-                <CheckCircle size={16} /> Latest Prices: {latestDataDate}
+                <CheckCircle size={16} /> DA Prices: {latestDataDate}
               </div>
             )}
+
             <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", background: "#EFF6FF", color: "#1D4ED8", padding: "6px 14px", borderRadius: "var(--radius-full)", fontWeight: 600, fontSize: "var(--text-sm)" }}>
               <MapPin size={16} /> Market: Lucena City
             </div>
@@ -959,7 +1047,7 @@ export default function LucenaDecisionSupport() {
           <div style={{ marginBottom: "var(--space-4)" }}>
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "baseline", gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
               <h2 style={{ fontSize: "var(--text-2xl)", fontWeight: 800, color: "var(--color-accent)", margin: 0 }}>Today's Lucena Market</h2>
-              <span style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)", fontWeight: 600 }}>Live Affordability Indicators</span>
+              <span style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)", fontWeight: 600 }}>Department of Agriculture (DA) Prevailing Price Reference · Live Indicators</span>
             </div>
 
             {/* Visual Category Navigation */}
@@ -1023,133 +1111,264 @@ export default function LucenaDecisionSupport() {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: isMobileGrid ? "repeat(2, 1fr)" : "repeat(auto-fill, minmax(200px, 1fr))", gap: "var(--space-4)" }}>
-            {(() => {
-              const filteredStaples = activeCategory === 'All' ? staples : staples.filter(s => s.category === activeCategory || s.type === activeCategory.toLowerCase());
-              const totalPages = Math.ceil(filteredStaples.length / itemsPerPage);
-              const paginatedStaples = filteredStaples.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-              return (
-                <>
-                  {paginatedStaples.map(item => (
-                    <div key={item.id} className="card" style={{ padding: "12px", display: "flex", flexDirection: "column", borderTop: `4px solid ${item.price === 0 ? '#9CA3AF' : item.status === 'below' ? '#16A34A' : item.status === 'above' ? '#DC2626' : '#EAB308'}`, flexShrink: 0 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
-                        <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-secondary)", lineHeight: 1.2 }}>{item.name}</div>
-                        <Bookmark size={14} color="var(--text-muted)" style={{ cursor: "pointer", flexShrink: 0, marginLeft: 4 }} />
-                      </div>
-
-                      <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginBottom: "4px", flexWrap: "wrap" }}>
-                        <span style={{ fontSize: "var(--text-3xl)", fontWeight: 900, color: "var(--color-accent)", letterSpacing: "-1px" }}>{item.price > 0 ? `₱${item.price}` : "N/A"}</span>
-                        {(item.lowPrice > 0 && item.highPrice > 0 && item.lowPrice !== item.highPrice) && (
-                          <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>
-                            (₱{item.lowPrice} - ₱{item.highPrice})
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Affordability Badge */}
-                      {item.price > 0 ? (
-                        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: item.status === 'below' ? '#F0FDF4' : item.status === 'above' ? '#FEF2F2' : '#FEFCE8', color: item.status === 'below' ? '#166534' : item.status === 'above' ? '#7F1D1D' : '#854D0E', padding: "2px 6px", borderRadius: 4, fontSize: "10px", fontWeight: 700, textTransform: "uppercase", marginBottom: "8px", alignSelf: "flex-start" }}>
-                          <div style={{ width: 6, height: 6, borderRadius: 3, background: item.status === 'below' ? '#16A34A' : item.status === 'above' ? '#DC2626' : '#EAB308' }} />
-                          {item.status === 'below' ? 'Lower than Avg' : item.status === 'above' ? 'Higher than Avg' : 'Near Average'}
-                        </div>
-                      ) : (
-                        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: '#F3F4F6', color: '#4B5563', padding: "2px 6px", borderRadius: 4, fontSize: "10px", fontWeight: 700, textTransform: "uppercase", marginBottom: "8px", alignSelf: "flex-start" }}>
-                          <div style={{ width: 6, height: 6, borderRadius: 3, background: '#9CA3AF' }} />
-                          No Data Today
-                        </div>
-                      )}
-
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", marginBottom: "4px" }}>
-                        <span>1W: <span style={{ color: item.weeklyChange > 0 ? '#DC2626' : '#16A34A' }}>{item.weeklyChange > 0 ? '+' : ''}{item.weeklyChange}%</span></span>
-                        <span>1M: <span style={{ color: item.monthlyChange > 0 ? '#DC2626' : '#16A34A' }}>{item.monthlyChange > 0 ? '+' : ''}{item.monthlyChange}%</span></span>
-                      </div>
-
-                      <div style={{ height: 28, width: "100%", marginTop: "auto" }}>
-                        {isMounted ? (
-                          <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={item.sparkline.map((v: number, i: number) => ({ val: v, idx: i }))}>
-                              <Line type="monotone" dataKey="val" stroke={item.status === 'above' ? '#DC2626' : item.status === 'below' ? '#16A34A' : '#EAB308'} strokeWidth={2} dot={false} isAnimationActive={false} />
-                              <YAxis domain={['dataMin - 5', 'dataMax + 5']} hide />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        ) : <div style={{ height: "100%", width: "100%" }} />}
-                      </div>
-
-                      <button
-                        style={{ marginTop: "8px", width: "100%", padding: "6px", background: "#F3F4F6", color: "var(--text-primary)", border: "none", borderRadius: "6px", fontWeight: 700, fontSize: "11px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
-                        onClick={() => {
-                          const catMatches = mapStalls.filter(s => s.category.toLowerCase().includes(item.type.toLowerCase()) || s.category.toLowerCase().includes(item.category.toLowerCase()));
-                          setMapSearch(item.name);
-                          if (catMatches.length > 0) {
-                            setSelectedMapStallId(catMatches[0].id);
-                          } else {
-                            setSelectedMapStallId(null);
-                          }
-                          setHighlightedMapStallIds([]);
-                          setNavigationRoute(null);
-                          document.getElementById('market-navigator')?.scrollIntoView({ behavior: 'smooth' });
-                        }}
-                      >
-                        <MapPin size={14} /> Find in Market
-                      </button>
-                    </div>
-                  ))}
-                </>
-              );
-            })()}
-          </div>
-
-          {/* Pagination Controls */}
           {(() => {
             const filteredStaples = activeCategory === 'All' ? staples : staples.filter(s => s.category === activeCategory || s.type === activeCategory.toLowerCase());
-            const totalPages = Math.ceil(filteredStaples.length / itemsPerPage);
-            if (totalPages > 1) {
-              return (
-                <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "var(--space-2)", marginTop: "var(--space-6)", flexWrap: "wrap" }}>
-                  <button
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    style={{ padding: "8px 16px", borderRadius: "var(--radius-md)", border: "1px solid #E2E8F0", background: currentPage === 1 ? "#F3F4F6" : "white", color: currentPage === 1 ? "#9CA3AF" : "var(--text-primary)", cursor: currentPage === 1 ? "not-allowed" : "pointer", fontWeight: 700, fontSize: "var(--text-sm)", transition: "all 0.2s" }}
-                  >
-                    Prev
-                  </button>
 
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
+            const renderCard = (item: any, key: any) => (
+              <div
+                key={key}
+                className="card"
+                style={{
+                  padding: "12px",
+                  display: "flex",
+                  flexDirection: "column",
+                  borderTop: `4px solid ${item.price === 0 ? '#9CA3AF' : item.status === 'below' ? '#16A34A' : item.status === 'above' ? '#DC2626' : '#EAB308'}`,
+                  flexShrink: 0,
+                  width: isMobileGrid ? "185px" : "auto",
+                  boxSizing: "border-box",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
+                  <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-secondary)", lineHeight: 1.2, minHeight: isMobileGrid ? "32px" : "auto" }}>{item.name}</div>
+                  <Bookmark size={14} color="var(--text-muted)" style={{ cursor: "pointer", flexShrink: 0, marginLeft: 4 }} />
+                </div>
+
+                <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginBottom: "4px", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: isMobileGrid ? "24px" : "var(--text-3xl)", fontWeight: 900, color: "var(--color-accent)", letterSpacing: "-1px" }}>{item.price > 0 ? `₱${item.price}` : "N/A"}</span>
+                  {(item.lowPrice > 0 && item.highPrice > 0 && item.lowPrice !== item.highPrice) && (
+                    <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>
+                      (₱{item.lowPrice} - ₱{item.highPrice})
+                    </span>
+                  )}
+                </div>
+
+                {/* Affordability Badge */}
+                {item.price > 0 ? (
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: item.status === 'below' ? '#F0FDF4' : item.status === 'above' ? '#FEF2F2' : '#FEFCE8', color: item.status === 'below' ? '#166534' : item.status === 'above' ? '#7F1D1D' : '#854D0E', padding: "2px 6px", borderRadius: 4, fontSize: "10px", fontWeight: 700, textTransform: "uppercase", marginBottom: "8px", alignSelf: "flex-start" }}>
+                    <div style={{ width: 6, height: 6, borderRadius: 3, background: item.status === 'below' ? '#16A34A' : item.status === 'above' ? '#DC2626' : '#EAB308' }} />
+                    {item.status === 'below' ? 'Lower than Avg' : item.status === 'above' ? 'Higher than Avg' : 'Near Average'}
+                  </div>
+                ) : (
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: '#F3F4F6', color: '#4B5563', padding: "2px 6px", borderRadius: 4, fontSize: "10px", fontWeight: 700, textTransform: "uppercase", marginBottom: "8px", alignSelf: "flex-start" }}>
+                    <div style={{ width: 6, height: 6, borderRadius: 3, background: '#9CA3AF' }} />
+                    No Data Today
+                  </div>
+                )}
+
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", marginBottom: "4px" }}>
+                  <span>1W: <span style={{ color: item.weeklyChange > 0 ? '#DC2626' : '#16A34A' }}>{item.weeklyChange > 0 ? '+' : ''}{item.weeklyChange}%</span></span>
+                  <span>1M: <span style={{ color: item.monthlyChange > 0 ? '#DC2626' : '#16A34A' }}>{item.monthlyChange > 0 ? '+' : ''}{item.monthlyChange}%</span></span>
+                </div>
+
+                <div style={{ height: 26, width: "100%", marginTop: "auto" }}>
+                  {isMounted ? (
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                      <LineChart data={item.sparkline.map((v: number, i: number) => ({ val: v, idx: i }))}>
+                        <Line type="monotone" dataKey="val" stroke={item.status === 'above' ? '#DC2626' : item.status === 'below' ? '#16A34A' : '#EAB308'} strokeWidth={2} dot={false} isAnimationActive={false} />
+                        <YAxis domain={['dataMin - 5', 'dataMax + 5']} hide />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : <div style={{ height: "100%", width: "100%" }} />}
+                </div>
+
+                <button
+                  style={{ marginTop: "8px", width: "100%", padding: "6px", background: "#F3F4F6", color: "var(--text-primary)", border: "none", borderRadius: "6px", fontWeight: 700, fontSize: "11px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                  onClick={() => {
+                    const catMatches = mapStalls.filter(s => s.category.toLowerCase().includes(item.type.toLowerCase()) || s.category.toLowerCase().includes(item.category.toLowerCase()));
+                    setMapSearch(item.name);
+                    if (catMatches.length > 0) {
+                      setSelectedMapStallId(catMatches[0].id);
+                    } else {
+                      setSelectedMapStallId(null);
+                    }
+                    setHighlightedMapStallIds([]);
+                    setNavigationRoute(null);
+                    document.getElementById('market-navigator')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                >
+                  <MapPin size={14} /> Find in Market
+                </button>
+              </div>
+            );
+
+            if (isMobileGrid) {
+              const carouselItems = filteredStaples.length >= 3
+                ? [...filteredStaples, ...filteredStaples]
+                : filteredStaples;
+
+              return (
+                <div style={{ position: "relative" }}>
+                  <style>{`
+                    .mobile-commodities-track::-webkit-scrollbar { display: none; }
+                  `}</style>
+
+                  {/* Mobile Header Bar: Pause/Play pill + Swipe prompt + Nav arrows */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", padding: "0 2px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <button
+                        onClick={() => setIsAutoScrollPaused(p => !p)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                          background: isAutoScrollPaused ? "#FEF3C7" : "#F1F5F9",
+                          color: isAutoScrollPaused ? "#92400E" : "var(--color-accent)",
+                          border: "1px solid",
+                          borderColor: isAutoScrollPaused ? "#FCD34D" : "#E2E8F0",
+                          borderRadius: "100px",
+                          padding: "4px 10px",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          transition: "all 0.15s ease",
+                        }}
+                        aria-label={isAutoScrollPaused ? "Resume auto-scroll" : "Pause auto-scroll"}
+                      >
+                        {isAutoScrollPaused ? <Play size={11} fill="currentColor" /> : <Pause size={11} fill="currentColor" />}
+                        <span>{isAutoScrollPaused ? "Paused" : "Auto-scroll"}</span>
+                      </button>
+                      <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 600 }}>⇄ Swipe</span>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 700, marginRight: "4px" }}>
+                        {filteredStaples.length} items
+                      </span>
+                      <button
+                        onClick={() => scrollMobileCarousel("left")}
+                        aria-label="Previous commodities"
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: "50%",
+                          border: "1px solid #E2E8F0",
+                          background: "white",
+                          color: "var(--color-accent)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer",
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                        }}
+                      >
+                        <ChevronLeft size={15} />
+                      </button>
+                      <button
+                        onClick={() => scrollMobileCarousel("right")}
+                        aria-label="Next commodities"
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: "50%",
+                          border: "1px solid #E2E8F0",
+                          background: "white",
+                          color: "var(--color-accent)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer",
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                        }}
+                      >
+                        <ChevronRight size={15} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Carousel Track with Edge Fade Gradients */}
+                  <div
+                    style={{
+                      position: "relative",
+                      maskImage: "linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent)",
+                      WebkitMaskImage: "-webkit-linear-gradient(left, transparent, black 16px, black calc(100% - 16px), transparent)",
+                    }}
+                  >
+                    <div
+                      ref={mobileCarouselRef}
+                      className="mobile-commodities-track"
+                      onTouchStart={handleMobileTouchStart}
+                      onTouchEnd={handleMobileTouchEnd}
+                      onMouseEnter={() => { isInteractingMobileRef.current = true; }}
+                      onMouseLeave={() => { isInteractingMobileRef.current = false; }}
+                      onScroll={handleMobileScroll}
                       style={{
-                        width: 36,
-                        height: 36,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        borderRadius: "var(--radius-md)",
-                        border: "1px solid",
-                        borderColor: currentPage === page ? "var(--color-primary)" : "#E2E8F0",
-                        background: currentPage === page ? "var(--color-primary)" : "white",
-                        color: currentPage === page ? "var(--color-accent)" : "var(--text-primary)",
-                        fontWeight: 700,
-                        fontSize: "var(--text-sm)",
-                        cursor: "pointer",
-                        transition: "all 0.2s"
+                        display: "grid",
+                        gridTemplateRows: "repeat(2, minmax(220px, auto))",
+                        gridAutoFlow: "column",
+                        gridAutoColumns: "185px",
+                        gap: "10px",
+                        overflowX: "auto",
+                        overflowY: "hidden",
+                        WebkitOverflowScrolling: "touch",
+                        scrollbarWidth: "none",
+                        msOverflowStyle: "none",
+                        padding: "4px 8px 10px 8px",
+                        touchAction: "pan-x",
                       }}
                     >
-                      {page}
-                    </button>
-                  ))}
-
-                  <button
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    style={{ padding: "8px 16px", borderRadius: "var(--radius-md)", border: "1px solid #E2E8F0", background: currentPage === totalPages ? "#F3F4F6" : "white", color: currentPage === totalPages ? "#9CA3AF" : "var(--text-primary)", cursor: currentPage === totalPages ? "not-allowed" : "pointer", fontWeight: 700, fontSize: "var(--text-sm)", transition: "all 0.2s" }}
-                  >
-                    Next
-                  </button>
+                      {carouselItems.map((item, idx) => renderCard(item, `m-${item.id}-${idx}`))}
+                    </div>
+                  </div>
                 </div>
               );
             }
-            return null;
+
+            // Desktop layout
+            const totalPages = Math.ceil(filteredStaples.length / itemsPerPage);
+            const paginatedStaples = filteredStaples.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+            return (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "var(--space-4)" }}>
+                  {paginatedStaples.map(item => renderCard(item, item.id))}
+                </div>
+
+                {totalPages > 1 && (
+                  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "var(--space-2)", marginTop: "var(--space-6)", flexWrap: "wrap" }}>
+                    <button
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      style={{ padding: "8px 16px", borderRadius: "var(--radius-md)", border: "1px solid #E2E8F0", background: currentPage === 1 ? "#F3F4F6" : "white", color: currentPage === 1 ? "#9CA3AF" : "var(--text-primary)", cursor: currentPage === 1 ? "not-allowed" : "pointer", fontWeight: 700, fontSize: "var(--text-sm)", transition: "all 0.2s" }}
+                    >
+                      Prev
+                    </button>
+
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        style={{
+                          width: 36,
+                          height: 36,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderRadius: "var(--radius-md)",
+                          border: "1px solid",
+                          borderColor: currentPage === page ? "var(--color-primary)" : "#E2E8F0",
+                          background: currentPage === page ? "var(--color-primary)" : "white",
+                          color: currentPage === page ? "var(--color-accent)" : "var(--text-primary)",
+                          fontWeight: 700,
+                          fontSize: "var(--text-sm)",
+                          cursor: "pointer",
+                          transition: "all 0.2s"
+                        }}
+                      >
+                        {page}
+                      </button>
+                    ))}
+
+                    <button
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      style={{ padding: "8px 16px", borderRadius: "var(--radius-md)", border: "1px solid #E2E8F0", background: currentPage === totalPages ? "#F3F4F6" : "white", color: currentPage === totalPages ? "#9CA3AF" : "var(--text-primary)", cursor: currentPage === totalPages ? "not-allowed" : "pointer", fontWeight: 700, fontSize: "var(--text-sm)", transition: "all 0.2s" }}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </>
+            );
           })()}
         </div>
         {/* NEW SECTION: Market Navigator */}
@@ -1576,7 +1795,7 @@ export default function LucenaDecisionSupport() {
                 <div style={{ textAlign: "center", padding: "var(--space-8) 0" }}>
                   <CheckCircle size={48} color="#16A34A" style={{ margin: "0 auto var(--space-4)" }} />
                   <h3 style={{ fontSize: "var(--text-lg)", fontWeight: 700, color: "var(--text-primary)", marginBottom: "var(--space-2)" }}>Complaint Submitted</h3>
-                  <p style={{ color: "var(--text-secondary)", marginBottom: "var(--space-6)" }}>Thank you for reporting this to the Lucena Market Authority. We will review your complaint and contact you shortly.</p>
+                  <p style={{ color: "var(--text-secondary)", marginBottom: "var(--space-6)" }}>Thank you for reporting this concern to the Lucena City Public Market Authority. Your complaint has been logged and will be reviewed by market administration. You may follow up using the complaint reference number shown in the office.</p>
                   <button onClick={() => { setIsComplaintModalOpen(false); setComplaintSubmitted(false); }} className="btn btn-primary">Done</button>
                 </div>
               ) : (

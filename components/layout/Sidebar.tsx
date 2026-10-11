@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Map, Store, AlertCircle,
   BarChart2, Globe, Users, FileText,
   ChevronLeft, ChevronRight, LogOut, ClipboardCheck,
-  FileWarning, Gavel, Brain, Activity, Megaphone
+  FileWarning, Gavel, Brain, Activity, Megaphone, X
 } from "lucide-react";
 
 type Role = "admin" | "vendor" | "customer";
@@ -76,18 +76,38 @@ interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
   mobileOpen?: boolean;
+  onClose?: () => void;
 }
 
-export default function Sidebar({ role = "admin", collapsed, onToggle, mobileOpen }: SidebarProps) {
+export default function Sidebar({ role = "admin", collapsed, onToggle, mobileOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const navItems = role === "admin" ? adminNav : role === "vendor" ? vendorNav : customerNav;
 
   return (
     <aside className={`sidebar${collapsed ? " collapsed" : ""}${mobileOpen ? " mobile-open" : ""}`} aria-label="Main navigation">
       {/* Logo */}
-      <div className="sidebar-logo">
-        <div className="sidebar-logo-icon" aria-hidden="true">GM</div>
-        <span className="sidebar-logo-text">GeoMarketics</span>
+      <div className="sidebar-logo" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+          <div className="sidebar-logo-icon" aria-hidden="true">GM</div>
+          <span className="sidebar-logo-text">GeoMarketics</span>
+        </div>
+        <button
+          className="mobile-sidebar-close-btn"
+          onClick={onClose}
+          aria-label="Close menu"
+          style={{
+            background: "rgba(255, 255, 255, 0.1)",
+            border: "none",
+            color: "rgba(255, 255, 255, 0.8)",
+            cursor: "pointer",
+            padding: "6px",
+            borderRadius: "8px",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <X size={18} />
+        </button>
       </div>
 
       {/* Nav */}
@@ -109,6 +129,7 @@ export default function Sidebar({ role = "admin", collapsed, onToggle, mobileOpe
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={() => onClose?.()}
                   className={`sidebar-link${isActive ? " active" : ""}`}
                   aria-current={isActive ? "page" : undefined}
                   title={collapsed ? item.label : undefined}
@@ -133,6 +154,7 @@ export default function Sidebar({ role = "admin", collapsed, onToggle, mobileOpe
         {collapsed && <div style={{ height: "1px", background: "rgba(255,255,255,0.1)", margin: "16px 12px 8px" }} />}
         <Link
           href="/"
+          onClick={() => onClose?.()}
           className={`sidebar-link${pathname === "/" ? " active" : ""}`}
           title={collapsed ? "Public View" : undefined}
           style={{
@@ -160,17 +182,24 @@ export default function Sidebar({ role = "admin", collapsed, onToggle, mobileOpe
             padding: "10px 12px",
             color: "rgba(255, 255, 255, 0.7)",
           }}
-          onClick={onToggle}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={() => {
+            if (mobileOpen) {
+              onClose?.();
+            } else {
+              onToggle();
+            }
+          }}
+          aria-label={mobileOpen ? "Close menu" : collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           <span className="sidebar-link-icon" aria-hidden="true">
-            {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+            {mobileOpen ? <ChevronLeft size={18} /> : collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </span>
-          <span className="sidebar-link-text">Collapse</span>
+          <span className="sidebar-link-text">{mobileOpen ? "Close Menu" : collapsed ? "Expand" : "Collapse"}</span>
         </button>
-        <Link href="/" className="sidebar-link" onClick={() => {
+        <Link href="/" onClick={() => {
             try { localStorage.removeItem("geomarketics_user"); } catch {}
-          }} style={{ 
+            onClose?.();
+          }} className="sidebar-link" style={{ 
           borderRadius: "12px", 
           padding: "10px 12px",
           color: "rgba(255, 255, 255, 0.7)",

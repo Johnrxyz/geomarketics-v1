@@ -253,10 +253,39 @@ export default function VendorManagementPage() {
         </div>
       </div>
 
+      <style>{`
+        .table-hover tr:hover { background-color: #f8fafc !important; }
+        .search-input:focus { border-color: var(--color-primary) !important; box-shadow: 0 0 0 3px rgba(37,99,235,0.1) !important; outline: none; }
+        .form-select:focus { border-color: var(--color-primary) !important; outline: none; }
+        .dropdown-item:hover { background: #F8FAFC !important; }
+        @keyframes dropdownFadeIn { from { opacity: 0; transform: translateY(-6px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        
+        .modal-form-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--space-4);
+          margin-bottom: var(--space-4);
+        }
+        @media (max-width: 600px) {
+          .modal-form-grid {
+            grid-template-columns: 1fr;
+            gap: var(--space-3);
+          }
+          .page-header-actions {
+            flex-wrap: wrap;
+            width: 100%;
+          }
+          .page-header-actions .btn {
+            flex: 1;
+            justify-content: center;
+          }
+        }
+      `}</style>
+
       <div className="card" style={{ display: "flex", flexDirection: "column", minHeight: 0, boxShadow: "var(--shadow-lg)", border: "1px solid var(--border-color)" }}>
         {/* Table Controls */}
-        <div className="card-header" style={{ padding: "var(--space-6)", borderBottom: "1px solid var(--border-color)", display: "flex", gap: "var(--space-6)", flexWrap: "wrap", alignItems: "flex-end", background: "#fcfcfc" }}>
-          <div className="search-input-wrapper" style={{ flex: "1 1 400px", position: "relative" }}>
+        <div className="card-header" style={{ padding: "var(--space-6)", borderBottom: "1px solid var(--border-color)", display: "flex", gap: "var(--space-4)", flexWrap: "wrap", alignItems: "flex-end", background: "#fcfcfc" }}>
+          <div className="search-input-wrapper" style={{ flex: "1 1 260px", minWidth: 200, maxWidth: "100%", position: "relative" }}>
             <Search size={18} className="search-icon" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
             <input
               type="search"
@@ -268,14 +297,14 @@ export default function VendorManagementPage() {
             />
           </div>
 
-          <div style={{ display: "flex", gap: "var(--space-4)", flexWrap: "wrap" }}>
-            <div className="form-group" style={{ marginBottom: 0 }}>
+          <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap", flex: "1 1 auto" }}>
+            <div className="form-group" style={{ marginBottom: 0, flex: "1 1 140px" }}>
               <label className="form-label" style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>Section</label>
               <div style={{ position: "relative" }}>
                 <Filter size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
                 <select
                   className="form-select"
-                  style={{ paddingLeft: 36, height: 40, fontSize: "13px", minWidth: 160, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)" }}
+                  style={{ paddingLeft: 36, height: 40, fontSize: "13px", width: "100%", borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)" }}
                   value={filterSection}
                   onChange={(e) => setFilterSection(e.target.value)}
                 >
@@ -284,13 +313,13 @@ export default function VendorManagementPage() {
               </div>
             </div>
 
-            <div className="form-group" style={{ marginBottom: 0 }}>
+            <div className="form-group" style={{ marginBottom: 0, flex: "1 1 140px" }}>
               <label className="form-label" style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>Stall Status</label>
               <div style={{ position: "relative" }}>
                 <Filter size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
                 <select
                   className="form-select"
-                  style={{ paddingLeft: 36, height: 40, fontSize: "13px", minWidth: 160, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)" }}
+                  style={{ paddingLeft: 36, height: 40, fontSize: "13px", width: "100%", borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)" }}
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
                 >
@@ -542,7 +571,7 @@ export default function VendorManagementPage() {
               <button onClick={() => setAddVendorModalOpen(false)} style={closeButtonStyle}><X size={18} /></button>
             </div>
             <div style={{ padding: "var(--space-6)" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)", marginBottom: "var(--space-4)" }}>
+              <div className="modal-form-grid">
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label" style={{ fontWeight: 600, fontSize: "13px", marginBottom: 6 }}>First Name <span style={{ color: "var(--color-error)" }}>*</span></label>
                   <input type="text" className="form-input" style={{ width: "100%", height: 42, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", padding: "0 12px" }} value={addVendorForm.first_name} onChange={e => setAddVendorForm(f => ({ ...f, first_name: e.target.value }))} placeholder="Juan" />
@@ -563,7 +592,7 @@ export default function VendorManagementPage() {
                 </select>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)", marginBottom: "var(--space-4)" }}>
+              <div className="modal-form-grid">
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label" style={{ fontWeight: 600, fontSize: "13px", marginBottom: 6 }}>Email</label>
                   <input type="email" className="form-input" style={{ width: "100%", height: 42, borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", padding: "0 12px" }} value={addVendorForm.email} onChange={e => setAddVendorForm(f => ({ ...f, email: e.target.value }))} placeholder="optional@email.com" />
@@ -589,14 +618,6 @@ export default function VendorManagementPage() {
           </div>
         </div>
       )}
-
-      <style>{`
-        .table-hover tr:hover { background-color: #f8fafc !important; }
-        .search-input:focus { border-color: var(--color-primary) !important; box-shadow: 0 0 0 3px rgba(37,99,235,0.1) !important; outline: none; }
-        .form-select:focus { border-color: var(--color-primary) !important; outline: none; }
-        .dropdown-item:hover { background: #F8FAFC !important; }
-        @keyframes dropdownFadeIn { from { opacity: 0; transform: translateY(-6px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
-      `}</style>
     </AppShell>
   );
 }

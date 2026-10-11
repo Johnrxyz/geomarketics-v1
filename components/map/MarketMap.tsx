@@ -1577,6 +1577,7 @@ export default function MarketMap({
 
       {/* â”€â”€ Floating: Building / Floor Selectors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div
+        className="market-map-floor-controls"
         onPointerDown={(e) => e.stopPropagation()}
         style={{
           position: "absolute",
@@ -1688,6 +1689,7 @@ export default function MarketMap({
 
       {/* â”€â”€ Zoom Controls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div
+        className="market-map-zoom-controls"
         style={{
           position: "absolute",
           bottom: (padding?.bottom || 0) + 130,

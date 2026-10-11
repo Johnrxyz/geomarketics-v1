@@ -263,7 +263,7 @@ export default function AdminVendorProfilePage({ params }: { params: Promise<{ i
             <Store size={18} style={{ color: "var(--text-muted)" }} />
           </div>
           <div className="card-body">
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "var(--space-4)" }}>
               {[
                 { label: "Stall Number", value: profile.stall },
                 { label: "Section",      value: profile.section },
